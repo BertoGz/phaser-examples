@@ -1,0 +1,9 @@
+{
+  "short_name": "Phaser Webpack App",
+  "name": "Phaser Webpack App",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "orientation": "portrait"
+}

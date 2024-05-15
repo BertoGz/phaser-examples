@@ -1,0 +1,4 @@
+{
+  "watch": ["src/**/*.js", "webpack.config.js"],
+  "exec": "npx webpack && node server.js"
+}

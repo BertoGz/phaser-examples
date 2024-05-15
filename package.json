@@ -1,0 +1,25 @@
+{
+  "name": "phaser-webpack-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon --inspect=3000"
+  },
+  "author": "Berto Gonzalez",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "fabric": "^5.3.0",
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.24.1",
+    "@babel/core": "^7.24.4",
+    "@babel/preset-env": "^7.24.4",
+    "nodemon": "^2.0.20",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4"
+  }
+}
