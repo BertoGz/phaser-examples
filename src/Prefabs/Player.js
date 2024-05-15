@@ -53,7 +53,7 @@ export default class Player extends Phaser.GameObjects.Image {
     super(scene, x, y, "char_sprite", 6 * 8 - 1);
     this.scene = scene;
     this.movementHandler = new MovementHandler(this, config);
-    //);
+
     this.setOrigin(0.5, 0.5);
   }
   update() {
