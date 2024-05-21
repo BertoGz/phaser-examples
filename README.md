@@ -1,16 +1,17 @@
-# Phaser Smooth-Pixel Example
+# Phaser Examples
 
-Welcome to the Phaser Smooth-Pixel Example! This showcase was created to delve into the nuances of operating within a pixel-perfect environment while utilizing a fluid game camera.
+Welcome to Phaser Examples! I developed this repository to document solutions for typical game development challenges, especially within Phaser 3, such as achieving pixel-perfect graphics and optimizing the rendering of numerous game objects using quadtree. Feel free to use any of my solutions in your projects.
 
 ## Installation
 
-Before you can run the project, you'll need to install its dependencies. Make sure you have Node and npm installed on your machine. Then, navigate to the project directory in your terminal and run:
+Before you can run the project, you'll need to install its dependencies. Make sure you have Node and npm installed on your machine. Then, navigate to the project directory in your terminal and run
 
 ```bash
 npm install
 ```
-To run:
+To start the local server
 
 ```bash
 npm start
 ```
+lastly navigate to localhost:3000 on any browser
