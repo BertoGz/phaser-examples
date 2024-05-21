@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev-start": "nodemon --inspect=3000",
-    "start": "nodemon --inspect=3000"
+    "build": "npx webpack",
+    "start": "node server.js"
   },
   "author": "Berto Gonzalez",
   "license": "ISC",
