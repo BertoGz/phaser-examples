@@ -13,6 +13,7 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
     );
 
     this.upscale = scene.game.config.upscale ?? scaling ?? 1;
+
     this.setOrigin(0, 0);
     this.setScrollFactor(0, 0);
     // set camera

@@ -29,8 +29,8 @@ class Scene extends Phaser.Scene {
       this.camera,
       0,
       0,
-      game.config.width,
-      game.config.height
+      game.config.width+1,
+      game.config.height+1
     );
     this.add.existing(this.renderTexture);
 

@@ -41,8 +41,8 @@ class Scene extends Phaser.Scene {
     //create camera and player
     this.camera = new PhaserCamera(this, 0, 0);
     this.player = new Player(this, 0, 0, {
-      maxSpeed: 1,
-      lerp: 1,
+      maxSpeed: 2,
+      lerp: 0.01,
     });
 
     // create render texture to draw game objects to
@@ -51,8 +51,8 @@ class Scene extends Phaser.Scene {
       this.camera,
       0,
       0,
-      game.config.width,
-      game.config.height
+      game.config.width+1,
+      game.config.height+1
     );
 
     this.add.existing(this.renderTexture);

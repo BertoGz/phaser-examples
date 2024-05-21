@@ -1,6 +1,8 @@
 import { lerp } from "../Functions/lerp";
-import { getGameScaling } from "../Functions/getGameScaling";
 
+/**
+ * @description creates a phaser Camera
+ */
 export default class PhaserCamera extends Phaser.Cameras.Scene2D.Camera {
   constructor(scene, x = 0, y = 0, scaling) {
     super(x, y, scene.game.config.width, scene.game.config.height);
@@ -40,9 +42,9 @@ export default class PhaserCamera extends Phaser.Cameras.Scene2D.Camera {
     if (this.target) {
       // set the smooth target values
       const lerpedTargetX =
-        this.target.x * this.upscale - getGameScaling(this.scene).width / 2;
+        this.target.x * this.upscale - this.width / 2;
       const lerpedTargetY =
-        this.target.y * this.upscale - getGameScaling(this.scene).height / 2;
+        this.target.y * this.upscale - this.height / 2;
 
       // apply target values to camera scroll position
       this.scrollX = lerp(this.scrollX, lerpedTargetX, this.smoothing);
