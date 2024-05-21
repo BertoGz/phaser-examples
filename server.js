@@ -7,6 +7,12 @@ app.use(express.static(path.join(__dirname + "/public")));
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
 });
+app.get("/quadtree-demo", (req, res) => {
+  res.sendFile(__dirname + "/public/quadtree.html");
+});
+app.get("/smooth-pixel-demo", (req, res) => {
+  res.sendFile(__dirname + "/public/smooth-pixel.html");
+});
 
 app.get("/manifest.json", (req, res) => {
   res.sendFile(__dirname + "/public/manifest.json");

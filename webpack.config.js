@@ -1,10 +1,15 @@
 const path = require("path");
 
 module.exports = {
-  entry: "/src/index.js",
+  entry: {
+    index: { import: "./src/index.js" },
+    smoothPixel: { import: "./src/Examples/smooth-pixel.js" },
+    quadtree: { import: "./src/Examples/quadtree.js" },
+  }, // Replace with your entry file
   output: {
-    path: path.resolve(__dirname, "public"),
-    filename: "bundle.js",
+    filename: "[name].bundle.js", // Output file name
+    path: path.resolve(__dirname, "public"), // Output directory
   },
-  mode: "development",
+  mode: "development", // Set to 'production' for minification
+  // devtool: "source-map", // Generates source maps for debugging
 };
