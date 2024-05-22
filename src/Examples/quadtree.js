@@ -8,19 +8,21 @@
  */
 
 import Phaser from "phaser";
-import { QuadTreeObject } from "surf-make/src";
 import PhaserCamera from "../Classes/PhaserCamera";
 import Player from "../Prefabs/Player";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
-import Boundary from "surf-make/src/Boundary";
-import QuadtreeManager from "surf-make/src/QuadtreeManager";
+import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
 
 let game;
 
-// we will store the instances
+// for debugging ui overlay
 let uniqueInstances = new Map();
 let instancesDrawn = 0;
 let totalInstances = 50000;
+
+/**
+ * @description this scene will create our player, camera, renderTexture, and quadtree.
+ */
 class Scene extends Phaser.Scene {
   constructor() {
     super({ key: "Scene" });
@@ -51,22 +53,23 @@ class Scene extends Phaser.Scene {
       this.camera,
       0,
       0,
-      game.config.width+1,
-      game.config.height+1
+      game.config.width + 1,
+      game.config.height + 1
     );
 
+    // let phaser manage this object
     this.add.existing(this.renderTexture);
 
-    // camera follows player
+    // set camera follow player
     this.camera.startFollow(this.player, false, 0.05);
 
-    // create quadtree manager
+    // create a quadtree manager
     this.qm = new QuadtreeManager();
 
-    //create quad tree
-    this.environmentTree = this.qm.createTree({ name: "environment" });
+    // create quadtree
+    this.tree = this.qm.createTree({ name: "environment" });
 
-    // create a mass amount of tree game objects
+    // create a mass amount of game objects
     for (let i = 0; i < totalInstances; i++) {
       const boundaryWidth = 8000;
 
@@ -79,14 +82,14 @@ class Scene extends Phaser.Scene {
       );
       img.depth = img.y;
       // utilize QuadTreeObject to wrap img
-      const tree = new QuadTreeObject(img);
-      tree.getPosition = () => {
+      const gm = new QuadTreeObject(img);
+      gm.getPosition = () => {
         return [img.x, img.y];
       };
-      this.environmentTree.addItem(tree);
+      this.tree.addItem(gm);
     }
 
-    this.environmentTree.addQueuedPoints();
+    this.tree.addQueuedPoints();
 
     // create ui display
     this.ui = this.make
@@ -99,7 +102,7 @@ class Scene extends Phaser.Scene {
     this.renderTexture.removeAll();
     this.player.update(time, delta);
     this.renderTexture.add(this.player, 1);
-    this.environmentTree.update(this.player.x, this.player.y);
+    this.tree.update(this.player.x, this.player.y);
 
     const boundary = new Boundary(
       this.camera.scrollX,
@@ -112,7 +115,7 @@ class Scene extends Phaser.Scene {
     // set drawn intance count to 0
     instancesDrawn = 0;
 
-    this.environmentTree.executeWithinRange(boundary, (point) => {
+    this.tree.executeWithinRange(boundary, (point) => {
       const instance = point.getData();
 
       uniqueInstances.set(instance.id, 1);
