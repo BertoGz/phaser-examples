@@ -5,6 +5,7 @@ module.exports = {
     index: { import: "./src/index.js" },
     smoothPixel: { import: "./src/Examples/smooth-pixel.js" },
     quadtree: { import: "./src/Examples/quadtree.js" },
+    tiled: { import: "./src/Examples/tiled.js" },
   }, // Replace with your entry file
   output: {
     filename: "[name].bundle.js", // Output file name
