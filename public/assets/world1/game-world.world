@@ -1,0 +1,62 @@
+{
+    "maps": [
+        {
+            "fileName": "b.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "fileName": "a.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 1600,
+            "y": 0
+        },
+        {
+            "fileName": "c.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 1600,
+            "y": -1600
+        },
+        {
+            "fileName": "d.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 3200,
+            "y": 0
+        },
+        {
+            "fileName": "e.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 4800,
+            "y": 0
+        },
+        {
+            "fileName": "f.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 6400,
+            "y": 0
+        },
+        {
+            "fileName": "g.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 6400,
+            "y": -1600
+        },
+        {
+            "fileName": "h.json",
+            "height": 1600,
+            "width": 1600,
+            "x": 4800,
+            "y": -1600
+        }
+    ],
+    "onlyShowAdjacentMaps": true,
+    "type": "world"
+}
