@@ -33,8 +33,17 @@ const pixelDemoBtn = createButton("Pixel Perfect Demo", () => {
   window.location.href = window.location.origin + "/smooth-pixel-demo";
 });
 newDiv.appendChild(pixelDemoBtn);
+
 const quadtreeDemoBtn = createButton("Quadtree Demo", () => {
   window.location.href = window.location.origin + "/quadtree-demo";
 });
 newDiv.appendChild(quadtreeDemoBtn);
+
+
+const tiledDemoBtn = createButton("Tiled Demo", () => {
+  window.location.href = window.location.origin + "/tiled-demo";
+});
+newDiv.appendChild(tiledDemoBtn);
+
 document.body.style.backgroundColor = "white";
+
