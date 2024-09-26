@@ -1,17 +1,22 @@
 const express = require("express");
 const path = require("path");
-const app = express();
-
+const app = express()
 app.use(express.static(path.join(__dirname + "/public")));
+
 // Serve the initial HTML page
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
 });
+
+// All Other App Routes...
 app.get("/quadtree-demo", (req, res) => {
   res.sendFile(__dirname + "/public/quadtree.html");
 });
 app.get("/smooth-pixel-demo", (req, res) => {
   res.sendFile(__dirname + "/public/smooth-pixel.html");
+});
+app.get("/tiled-demo", (req, res) => {
+  res.sendFile(__dirname + "/public/tiled.html");
 });
 
 app.get("/manifest.json", (req, res) => {
