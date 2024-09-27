@@ -23,6 +23,7 @@ class Id {
     this.cursor = 0;
   }
   destroy() {
+    this.clear(); // Clear instance data when destroyed
     Id.instance = undefined;
   }
 }
@@ -40,15 +41,20 @@ class Timer {
     const timeSet = Date.now();
     this.timers.set(point.id, { fn, time, timeSet });
   }
-  update() {
+  execute() {
+    const newTime = Date.now();
     this.timers.forEach((t, key) => {
       const { fn, time, timeSet } = t || {};
-
-      if (Date.now() - timeSet > time) {
+      a;
+      if (newTime - timeSet > time) {
         fn();
         this.timers.delete(key);
       }
     });
+  }
+  destroy() {
+    this.timers.clear(); // Clear all timers
+    Timer.instance = undefined;
   }
 }
 
@@ -95,28 +101,72 @@ export class Boundary {
 }
 
 /**
+ * @description wrapper for data
+ */
+export class QuadTreeObject {
+  constructor(gameObject) {
+    this.gm = gameObject;
+    this.point = undefined;
+    this.tree = undefined;
+    this.isMounted = false;
+  }
+  init(tree) {
+    this.tree = tree;
+    const time = new Date().getTime();
+    this.id = `${time}-${this.name}-${QuadtreeManager.instance.generateId()}`;
+    this.gm.id = this.id;
+    // this.parent = obj;
+    const fn = [this.destroy];
+    this.cacheFn = fn[0];
+    this.destroy = () => {
+      this.cacheFn();
+      this.point.remove();
+    };
+    this.isInit = true;
+  }
+
+  addToQuadtree(tree) {
+    this.point.setTree(tree);
+  }
+
+  getPosition() {
+    console.error(
+      "getPosition must be overwritten with custom getter returning [x,y] object position"
+    );
+  }
+  updatePosition() {
+    this.point.updatePosition(this);
+  }
+}
+
+/**
  * @description a point on the quadtree. Holds reference to the game object and methodfs to modify its stale value and more.
  */
 export class QuadTreePoint {
-  constructor(pos, id, tree) {
+  constructor(pos, obj, tree) {
     this.x = pos.x;
     this.y = pos.y;
     this.quadNode = undefined;
     this._tree = tree;
     this.stale = false;
-    this.id = id;
+    this.id = obj.id;
     this.color = "black";
+    this.obj = obj;
+    this.obj.point = this;
   }
   getData() {
-    return this._tree.allPoints.get(this.id);
+    return this.obj;
   }
   setStale() {
-    this.quadNode = undefined;
     this.stale = true;
     return this.stale;
   }
-  updatePoint() {
-    this._tree.updatePoint(this);
+
+  updatePosition(data) {
+    const [newX, newY] = data.getPosition()[0];
+    this.x = newX;
+    this.y = newY;
+    this.setStale();
   }
   getPosition() {
     return [this.x, this.y];
@@ -124,14 +174,16 @@ export class QuadTreePoint {
   setTree(tree) {
     this._tree = tree;
   }
-  destroy() {
+  // remove the point from the quadnode
+  // remove the point from the tree
+  remove() {
+    this.setStale();
+    // remove point if currenly pare of node
     if (this.quadNode) {
-      this.quadNode.removePoint(this.id);
+      this.quadNode.deReferencePoint(this);
     }
-    if (this._tree) {
-      this._tree.removePoint(this.id);
-    }
-    this.data = undefined;
+    // remove point if currently in queued list
+    this._tree.queuedPoints.delete(this.id);
   }
 }
 
@@ -159,6 +211,7 @@ class QuadTreeNode {
     ];
     this.color = arr[Math.floor(Math.random() * arr.length)];
   }
+  // returns all the subtrees in a list
   getSubtrees(node = this) {
     if (node === null || !node.children) {
       return [];
@@ -174,21 +227,20 @@ class QuadTreeNode {
 
     return subtrees;
   }
-  getSubtreePoints(node = this) {
-    const subtreePoints = [];
-    if (node === null || !node.children) {
-      return [];
+  // Method to gather all points from the quadtree recursively
+  getAllPoints() {
+    let allPoints = [...this.points]; // Gather points from this node
+
+    // If this node has children, gather points from them as well
+    if (this.children) {
+      for (let child of this.children) {
+        allPoints.push(...child.getAllPoints()); // Recursively gather points from children
+      }
     }
 
-    subtreePoints.push(...node.points);
-
-    for (const child of node.children) {
-      const childPoints = this.getSubtreePoints(child);
-      subtreePoints.push(...childPoints);
-    }
-
-    return subtreePoints;
+    return allPoints; // Return all gathered points
   }
+
   getRoot() {
     if (this.parent) {
       return this.parent.getRoot();
@@ -218,7 +270,7 @@ class QuadTreeNode {
         // try subdivide
         // if could not sub divide then we reached minimum quad size
         // so just push shape onto this quad
-        if (!this.subdivide()) {
+        if (!this._subdivide()) {
           doInsert();
         }
       }
@@ -239,7 +291,7 @@ class QuadTreeNode {
     }
     return this;
   }
-  subdivide() {
+  _subdivide() {
     const { x, y, width, height } = this.boundary;
     //exit so that we dont create infinite space.
     if (Math.floor(width) <= this.quadtreeManager.resolution) {
@@ -295,14 +347,10 @@ class QuadTreeNode {
     }
     return pointsInRange;
   }
-  /**
-   * @description
-   * run a function on each of the points returned by the quadtree
-   * @param {*} range boundary
-   * @param {*} fn fn to run
-   */
-  executeWithinRange = (boundary, fn, onEnd) => {
+  executeWithinRangedd(boundary) {
     let delta = 0;
+    // check when we lasted called
+    // if enough time passes we can execute this function call again
     if (!this.lastCall) {
       this.lastCall = Date.now();
     } else {
@@ -311,17 +359,50 @@ class QuadTreeNode {
     }
 
     for (let point of this.points) {
-      let canCall = true;
+      // check if the point falls within the boundary of the quadtree if it doesnt, skip the call
       if (!this._quadtree.rootBoundary.contains(point)) {
-        // point.getData().destroy();
-        // point.destroy();
-        canCall = false;
+        continue;
       }
 
       if (boundary.contains(point)) {
-        canCall && fn(point);
-
+        fn(point);
         Timer.instance.add(point, () => onEnd(point), delta);
+      }
+    }
+
+    if (this.children) {
+      for (let child of this.children) {
+        child.executeWithinRange(boundary);
+      }
+    }
+    return;
+  }
+  /**
+   * @description
+   * run a function on each of the points returned by the quadtree
+   * @param {*} range boundary
+   * @param {*} fn fn to run
+   */
+  executeWithinRange = (boundary, fn, onEnd) => {
+    let delta = 0;
+    // check when we lasted called
+    // if enough time passes we can execute this function call again
+    if (!this.lastCall) {
+      this.lastCall = Date.now();
+    } else {
+      delta = Date.now() - this.lastCall;
+      this.lastCall = Date.now();
+    }
+
+    for (let point of this.points) {
+      // check if the point falls within the boundary of the quadtree if it doesnt, skip the call
+      if (!this._quadtree.treeBoundary.contains(point)) {
+        continue;
+      }
+
+      if (boundary.contains(point)) {
+        fn(point);
+        //   Timer.instance.add(point, () => onEnd(point), delta);
       }
     }
 
@@ -361,20 +442,55 @@ class QuadTreeNode {
     return;
   };
 
-  removePoint(pointId) {
-    this.points = this.points.filter((p) => p.id !== pointId);
+  // rework to find point on tree itself
+  deReferencePoint(point) {
+    // Remove point from the current node
+
+    this.points = this.points.filter((p) => p.id !== point.id);
+  }
+  _cleanupNode() {
+    // You can implement any logic here to clean up nodes
+    // for example, you could collapse this node if it's empty and has no children
+    if (this.parent && Array.isArray(this.parent.children)) {
+      // Check if all sibling nodes of this node are also empty
+      const allSiblingsEmpty = this.parent.children.every(
+        (child) => child.points.length === 0 && !child.children
+      );
+
+      // If all siblings are empty, remove all children
+      if (allSiblingsEmpty) {
+        this.parent.children = null;
+      }
+    }
+  }
+
+  // deletes all points and its children node points
+  delete() {
+    // call destroy on each quadtree data point
+    this.points.forEach((point) => {
+      point.remove();
+    });
+    this.points = [];
+
+    // call recursively
+    if (this.children) {
+      for (let child of this.children) {
+        child.delete();
+      }
+    }
   }
 }
 
 class QuadTree {
-  root = undefined;
-  allPoints = new Map();
+  rootNode = undefined;
+  treeSize = 0;
   name = "default";
   _stale;
   _staleTime;
   _lastExecuteTime = Date.now();
   quadtreeManager = QuadtreeManager.instance;
-  queuedPoints = [];
+  queuedPoints = new Map();
+  dequeuedPoints = new Map();
   /**
    *
    * @param {Object} config
@@ -396,9 +512,9 @@ class QuadTree {
     if (name) {
       this.name = name;
     }
-    this.rootBoundary = boundary; // save the size of the roo boundary
-    this.root = new QuadTreeNode(boundary); // node
-    this.root._quadtree = this;
+    this.treeBoundary = boundary; // save the size of the root boundary
+    this.rootNode = new QuadTreeNode(boundary); // node
+    this.rootNode._quadtree = this;
     this._staleTime = staleTime;
     this._clientPosition = initialPosition;
   }
@@ -406,24 +522,27 @@ class QuadTree {
    * @description clears the quad tree
    */
   clear() {
-    this.root = new QuadTreeNode(this.rootBoundary);
-    this.root._quadtree = this;
+    this.rootNode = new QuadTreeNode(this.treeBoundary);
+    this.rootNode._quadtree = this;
   }
 
   /**
    * @description clears all data points from quadtree and creates new root. TODO: rename to clearPoints
    */
   delete() {
-    this.allPoints.clear();
-    this.root = undefined;
-    Id.instance.clear();
+    if (this.rootNode) {
+      this.rootNode.delete(); // Recursively delete root and children
+      this.rootNode = new QuadTreeNode(boundary); // node
+    }
+    this.queuedPoints.clear();
+    this.dequeuedPoints.clear();
   }
 
   /**
    * executes a function for each node
    */
-  executeOnEachQuadNode(node = this.root, fn) {
-    if (!this.root) {
+  executeOnEachQuadNode(node = this.rootNode, fn) {
+    if (!this.rootNode) {
       return;
     }
     total++;
@@ -440,64 +559,54 @@ class QuadTree {
   getTotal() {
     return total;
   }
-  /**
-   * @description goes through quadtree in search of all points
-   */
-  collectAllPoints() {
-    const allPoints = this.root.getSubtrees();
-    return allPoints;
+  _setTreeSize(length) {
+    this.treeSize = length;
   }
+
   /**
    * @description returns all points in quadtree
    */
   getAllPoints() {
-    return this.allPoints;
+    const allPoints = this.rootNode.getAllPoints();
+   // this._setTreeSize(allPoints.length);
+    return allPoints;
   }
   /**
    * @description returns all points in range
    */
   getItemsInRange(boundary) {
-    if (!this.root) {
+    if (!this.rootNode) {
       return;
     }
-    return [...this.root.queryRange(boundary), ...this.allPoints];
+    return [...this.rootNode.queryRange(boundary), ...this.allPoints];
   }
   /**
    * used by quadtreeManager, calls a function on items within range.
    */
   executeWithinRange(range, fn, onEnd) {
-    if (!this.root) {
+    if (!this.rootNode) {
       return;
     }
-    return this.root.executeWithinRange(range, fn, onEnd);
+    return this.rootNode.executeWithinRange(range, fn, onEnd);
   }
 
   /**
    *
    */
   executeOutsideRange(range, fn) {
-    if (!this.root) {
+    if (!this.rootNode) {
       return;
     }
-    return this.root.executeOutsideRange(range, fn);
+    return this.rootNode.executeOutsideRange(range, fn);
   }
-  /**
-   * @description\
-   * finds the position within quadtree space of a world space
-   */
-  _getPointPos(x, y) {
-    const outputX = x;
-    const outputY = y;
-    return { x: outputX, y: outputY };
-  }
+
   /**
    * @description inserts a point into the quadtree
    */
-  _addPoint(pointPos, object) {
-    const point = new QuadTreePoint(pointPos, object.id);
-    object.point = point;
-    this.allPoints.set(object.id, object);
-    const node = this.root.insert(point);
+  _makePoint(pointPos, object) {
+    const point = new QuadTreePoint(pointPos, object);
+
+    const node = this.rootNode.insert(point);
     if (node) {
       point.setTree(this);
     }
@@ -512,28 +621,21 @@ class QuadTree {
    */
 
   _queueNewPoint(pointPos, object) {
-    this.queuedPoints.push({ position: pointPos, object });
+    this.queuedPoints.set(object.id, { position: pointPos, object });
   }
   addQueuedPoints() {
+    //console.log("queded pts", this.queuedPoints.size);
+    // add to quadtree, delete from queue
     this.queuedPoints.forEach((p) => {
-      this._addPoint(p.position, p.object);
+      this._makePoint(p.position, p.object);
+      this.queuedPoints.delete(p.object.id);
     });
-    // this._lastExecuteTime = Date.now();
-    this.queuedPoints = [];
   }
-  _updatePointPosition(point) {
-    if (!point) {
-      return;
-    }
-    // update gameObjectPosition
-    const gameObject = point.getData();
-    const pointPos = gameObject.getPosition(gameObject);
-    this.point.x = pointPos[0];
-    this.point.y = pointPos[1];
-  }
+
+  objectMakeStale(gameObject) {}
   _updatePoints() {
     // collect all points
-    const ps = this.allPoints;
+    const ps = this.getAllPoints();
 
     //this.clear();
 
@@ -541,31 +643,48 @@ class QuadTree {
     ps.forEach((point) => {
       try {
         // create a new version of the point
-        this._updatePointPosition(point);
+        if (!point) {
+          return;
+        }
+        // update gameObjectPosition
+        const gameObject = point.data;
+        const pointPos = gameObject.getPosition(gameObject);
+        this.point.x = pointPos[0];
+        this.point.y = pointPos[1];
         // delete the old one from allPoints list
       } catch (e) {}
     });
 
-    this.redistributeNodes();
+    this.redistribute();
   }
   renderBoundary(camPosX = 0, camPosY = 0) {
-    if (this.root) {
-      this.root.renderBoundary(camPosX, camPosY);
+    if (this.rootNode) {
+      this.rootNode.renderBoundary(camPosX, camPosY);
     }
   }
-  update(clientPosX, clientPosY) {
+  execute(clientPosX, clientPosY) {
     this._clientPosition = { x: clientPosX, y: clientPosY };
-    this.rootBoundary = new Boundary(
-      clientPosX - this.rootBoundary.width / 2,
-      clientPosY - this.rootBoundary.height / 2,
-      this.rootBoundary.width,
-      this.rootBoundary.height
+    this.treeBoundary = new Boundary(
+      clientPosX - this.treeBoundary.width / 2,
+      clientPosY - this.treeBoundary.height / 2,
+      this.treeBoundary.width,
+      this.treeBoundary.height
     );
+    const lastTime = this.lastTime || Date.now();
+    if (!this.lastTime) {
+      this.lastTime = Date.now();
+    }
     ///////////////////////
     // check for stale data
     ////////////////////////
     const currentTime = Date.now();
     const elapsedTime = currentTime - this._lastExecuteTime;
+
+    if (currentTime - lastTime >= 1000) {
+      // console.log(this.queuedPoints.size, this.treeSize);
+      this.lastTime = Date.now();
+    }
+
     if (elapsedTime >= this._staleTime) {
       console.log("stale", this.name);
       this._stale = true;
@@ -582,34 +701,39 @@ class QuadTree {
    * @param {*} x x position within quadtree
    * @param {*} y y position within quadtree
    */
-  addItem(item) {
-    const [x, y] = item.getPosition();
-    item.tree = this;
-    item._mount(item);
-    const pointPos = this._getPointPos(x, y);
+  addItem(gameObject) {
+    const [x, y] = gameObject.getPosition();
+    gameObject.init(this);
 
-    this._queueNewPoint(pointPos, item);
+    this._queueNewPoint({ x, y }, gameObject);
   }
   removePoint(pointId) {
-    this.allPoints.delete(pointId);
+    if (this.rootNode) {
+      this.rootNode.removePoint(pointId);
+    }
   }
-  redistributeNodes() {
-    // clear the quadtree
-    this.clear();
-
-    // reset staleTime
-    this.stale = false;
-    this._lastExecuteTime = Date.now();
-
-    // add new points to quadtree
-    this.allPoints.forEach((p) => {
-      const [x, y] = p.getPosition();
-      this._addPoint({ x, y }, p);
+  // collects all the remaining points of the current tree
+  // de-references the tree and creates a new tree using
+  // the remaining points
+  redistribute() {
+    // Step 1: Collect all points from the current tree
+    const allPoints = this.getAllPoints();
+    allPoints.forEach((p) => {
+      p.quadNode = undefined;
+      p.stale = false;
     });
+
+    // Step 2: de-reference the existing root node and reate a new one (starting fresh)
+    this.rootNode = new QuadTreeNode(this.treeBoundary);
+    this.rootNode._quadtree = this;
+    // Step 4: Reinsert all points into the new quadtree
+    for (let point of allPoints) {
+      this.rootNode.insert(point);
+    }
   }
   refresh() {
+    this.redistribute();
     this.addQueuedPoints();
-    this.redistributeNodes();
   }
 }
 
@@ -655,51 +779,18 @@ export default class QuadtreeManager {
    * @descriptioncall call update to each tree using clientPosition
    */
   execute(clientPosX, clientPosY) {
-    this.trees.forEach((tree) => tree.update(clientPosX, clientPosY));
-    Timer.instance.update();
+    this.trees.forEach((tree) => tree.execute(clientPosX, clientPosY));
+    Timer.instance.execute();
   }
   getTree(treeName) {
     return QuadtreeManager.instance.trees.find((t) => t.name === treeName);
   }
+
   destroy() {
+    this.trees.forEach((tree) => tree.delete()); // Ensure all trees are deleted
+    this.trees.length = 0; // Clear trees array
+    Timer.instance.destroy(); // Ensure Timer is destroyed
+    Id.instance.destroy(); // Ensure Id is destroyed
     QuadtreeManager.instance = undefined;
-  }
-}
-
-/**
- * @description wrapper for data
- */
-export class QuadTreeObject {
-  constructor(gameObject) {
-    this.gm = gameObject;
-    this.point = undefined;
-    this.tree = undefined;
-  }
-
-  _mount(obj) {
-    const time = new Date().getTime();
-    this.id = `${time}-${this.name}-${QuadtreeManager.instance.generateId()}`;
-    this.gm.id = this.id;
-    this.parent = obj;
-    const fn = [this.destroy];
-    this.cacheFn = fn[0];
-    this.destroy = () => {
-      this.removeFromQuadTree();
-      this.cacheFn();
-    };
-  }
-
-  addToQuadtree(tree) {
-    this.point.setTree(tree);
-  }
-  removeFromQuadTree() {
-    if (this.point) {
-      this.point.destroy();
-    }
-  }
-  getPosition() {
-    console.error(
-      "getPosition must be overwritten with custom getter returning [x,y] object position"
-    );
   }
 }
