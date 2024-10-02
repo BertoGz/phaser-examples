@@ -103,6 +103,7 @@ export class Boundary {
 /**
  * @description wrapper for data
  */
+
 export class QuadTreeObject {
   constructor(gameObject) {
     this.gm = gameObject;
@@ -120,7 +121,11 @@ export class QuadTreeObject {
     this.cacheFn = fn[0];
     this.destroy = () => {
       this.cacheFn();
-      this.point.remove();
+      if (this.point) {
+        this.point.remove();
+      } else {
+        this.tree.errorPoints.push(this);
+      }
     };
     this.isInit = true;
   }
@@ -517,6 +522,7 @@ class QuadTree {
     this.rootNode._quadtree = this;
     this._staleTime = staleTime;
     this._clientPosition = initialPosition;
+    this.errorPoints = [];
   }
   /**
    * @description clears the quad tree
@@ -568,7 +574,6 @@ class QuadTree {
    */
   getAllPoints() {
     const allPoints = this.rootNode.getAllPoints();
-   // this._setTreeSize(allPoints.length);
     return allPoints;
   }
   /**

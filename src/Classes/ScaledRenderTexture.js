@@ -16,59 +16,73 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
 
     this.setOrigin(0, 0);
     this.setScrollFactor(0, 0);
-    // set camera
     this.camera = camera || scene.cameras.main;
-    this.items = [];
+
+    // Initialize the items as an array of layers
+    this.layers = [];
   }
+
+  // Adds an item to the specified layer (index)
   add(item, index = 0) {
-    if (!Array.isArray(this.items[index])) {
-      this.items[index] = [];
+    // If the layer does not exist, create it
+    if (!this.layers[index]) {
+      this.layers[index] = { depth: index, objects: new Map() };
     }
-    this.items[index].push(item);
+
+    // Add the item to the Map inside the layer
+    this.layers[index].objects.set(item, item);
   }
+
+  // Removes an item from the specified layer
+  remove(item, index) {
+    const layer = this.layers[index];
+    if (layer && layer.objects.has(item)) {
+      layer.objects.delete(item);
+    }
+  }
+
+  // Removes all items from all layers
   removeAll() {
-    this.items = [];
+    this.layers.forEach((layer) => layer.objects.clear());
   }
+
+  // Execute rendering and sorting by depth
   execute(fn) {
     const newCam = {
       x: Math.floor(this.camera.scrollX),
       y: Math.floor(this.camera.scrollY),
     };
-    // prepare render texture
-    this.clear();
 
-    //batch draw grass texture
+    // Clear the render texture before drawing
+    this.clear();
     this.beginDraw();
 
-    //sort items depth wise
-    // traverse each array element
+    // Sort layers by depth
+    this.layers.sort((a, b) => a.depth - b.depth);
 
-    this.items.forEach((innerArray, index) => {
-      if (Array.isArray(innerArray)) {
-        this.items[index] = innerArray.sort(function (a, b) {
-          return a.depth - b.depth;
-        });
-      }
-    });
+    // Loop through each layer and draw its objects
+    this.layers.forEach((layer) => {
+      // Iterate through each object in the layer's map
+      layer.objects.forEach((gm) => {
+        // Temporarily adjust the scale for rendering
+        const tempScale = gm.scale;
+        gm.scale = this.upscale;
 
-    // draw each item starting at lowest depth and working up
-    this.items.forEach((innerArray) => {
-      if (Array.isArray(innerArray)) {
-        innerArray.forEach((gm) => {
-          // apply any upscaling to graphics
-          const tempScale = gm.scale;
-          gm.scale = this.upscale;
-          this.batchDraw(
-            gm,
-            Math.round(gm.x * this.upscale - newCam.x),
-            Math.round(gm.y * this.upscale - newCam.y)
-          );
-          gm.scale = tempScale;
-        });
-      }
+        // Draw the object with upscaling
+        this.batchDraw(
+          gm,
+          Math.round(gm.x * this.upscale - newCam.x),
+          Math.round(gm.y * this.upscale - newCam.y)
+        );
+
+        // Restore the original scale
+        gm.scale = tempScale;
+      });
     });
 
     this.endDraw();
+
+    // Adjust the position of the texture
     const diffX = Math.floor(newCam.x) - this.camera.scrollX;
     const diffY = Math.floor(newCam.y) - this.camera.scrollY;
 
