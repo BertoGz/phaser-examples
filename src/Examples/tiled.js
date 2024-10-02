@@ -17,7 +17,7 @@ const worldAPI = new WorldAPI(WORLD_FILENAME);
 const worldLoader = worldAPI.createLoader({
   chunkSize: 16 * 100,
   gridSize: 3,
-  trailDistance: 3,
+  trailDistance: 1,
   name: "environment",
   table: "any",
 });
@@ -72,6 +72,7 @@ class Scene extends Phaser.Scene {
       lerp: 0.2,
     }).setDepth(10);
     const sprrr = this.add.sprite(1600 * 4.5, -900, "background").setScale(0);
+    this.spr2 = this.add.sprite(3200, -900, "background").setScale(0);
     // Create a tween to make the object wiggle back and forth
     this.tweens.add({
       targets: sprrr,
@@ -108,11 +109,11 @@ class Scene extends Phaser.Scene {
 
     this.camera.setTarget(this.player, 0.05);
     this.fpsText = this.add.text(0, 0, "", {
-      font: "82px Arial",
+      font: "11px Arial",
       fill: "#00ff00",
     });
     this.input.on("pointerdown", (pointer) => {
-      console.log("hellooopopo");
+      console.log("pointer down");
       const worldPoint = this.camera.getWorldPoint(pointer.x, pointer.y);
       false &&
         worldAPI.execute({
@@ -123,88 +124,7 @@ class Scene extends Phaser.Scene {
       this.lastClick = { x: worldPoint.x, y: worldPoint.y };
     });
 
-    worldLoader.onCreateObject2 = (payload) => {
-      const { object, chunk } = payload || {};
-      const { tileId, x, y } = object || {};
-
-      const tile = new Phaser.GameObjects.Image(
-        this,
-        x,
-        y,
-        "nature_tile",
-        tileId
-      ).setActive(false);
-
-      tile.name = "grass";
-
-      const qtO = new QuadTreeObject(tile);
-      chunk.objects.push(qtO);
-
-      qtO.getPosition = () => {
-        return [tile.x, tile.y];
-      };
-      qtO.destroy = () => {
-        this.renderTexture.remove(qtO.gm);
-        tile.setAlpha(0.5);
-        tile.destroy();
-      };
-      //  this.tree.addItem(qtO);
-      this.renderTexture.add(qtO.gm, 0);
-    };
-    worldLoader.onCreateChunkObjectsUnused = (payload) => {
-      const { objects, chunk } = payload || {};
-
-      let batchSize = 50;
-      let totalObjects = objects.length;
-      let createdObjects = 0;
-
-      //const group = this.add.group();
-      // group.x = chunk.x;
-      // group.y = chunk.y;
-
-      const c = this.time.addEvent({
-        delay: 5, // Time between batches (milliseconds)
-        callback: (d) => {
-          for (let i = 0; i < batchSize; i++) {
-            if (createdObjects >= totalObjects) {
-              chunk.setReady();
-              //   chunk.groups.push(group);
-              //    this.renderTexture.add(group);
-              //     console.log("@@done", createdObjects, totalObjects);
-              stopLoop();
-              return;
-            } // Stop if we've created enough
-
-            const { tileId, x, y } = objects[createdObjects] || {};
-
-            const tile = new Phaser.GameObjects.Image(
-              this,
-              x,
-              y,
-              "nature_tile",
-              tileId
-            ).setAlpha(0.5);
-
-            tile.name = "grass";
-
-            //  this.tree.addItem(qtO);
-            // group.add(tile);
-            chunk.objects.push(tile);
-            this.renderTexture.add(tile, 0);
-            createdObjects++;
-          }
-        },
-
-        loop: true,
-      });
-      const stopLoop = () => {
-        this.time.removeEvent(c);
-      };
-    };
     worldLoader.onCreateObject = (payload) => {
-      if (Math.random() > 0.8) {
-        return;
-      }
       const { object, chunk } = payload || {};
 
       const { tileId, x, y } = object || {};
@@ -218,17 +138,29 @@ class Scene extends Phaser.Scene {
       ).setAlpha(0.5);
 
       tile.name = "grass";
-
-      chunk.objects.push(tile);
-      this.renderTexture.add(tile, 0);
+      const gm = new QuadTreeObject(tile);
+      gm.destroy = () => {
+        // tile.setAlpha(0.5);
+        tile.destroy();
+        //   chunk.objects = chunk.objects.filter((gmi) => gmi !== gm);
+      };
+      gm.getPosition = () => {
+        return [tile.x, tile.y];
+      };
+      chunk.objects.push(gm);
+      this.tree.addItem(gm);
     };
     worldLoader.onChunksAllReady = () => {
-      console.log("all chunks ready");
-      //    this.tree.refresh();
+      //  console.log("called last");
+      this.tree.redistribute();
+      this.tree.addQueuedPoints();
+      console.log(this.tree.errorPoints);
     };
 
     worldLoader.onDestroyObject = (obj) => {
-      this.renderTexture.remove(obj, 0);
+      // console.log("called first");
+      // debugger;
+      //    this.renderTexture.remove(obj, 0);
       obj.destroy();
     };
     worldLoader.onDestroyComplete = () => {};
@@ -243,18 +175,17 @@ class Scene extends Phaser.Scene {
       .setText(`FPS: ${Math.round(fps)}`)
       .setPosition(this.camera.worldView.x, this.camera.worldView.y);
 
-    false && this.renderTexture.removeAll();
+    this.renderTexture.removeAll();
     this.player.update(time, 1);
     worldAPI.execute({
       x: this.player.x,
       y: this.player.y,
     });
 
+    this.renderTexture.add(this.player, 1);
+    this.renderTexture.add(this.spr2, 1);
 
-
-    true && this.renderTexture.add(this.player, 1);
-
-    false && this.tree.update(this.player.x, this.player.y);
+    this.tree.execute(this.player.x, this.player.y);
 
     const boundary = new Boundary(
       this.camera.scrollX,
@@ -265,19 +196,18 @@ class Scene extends Phaser.Scene {
     );
     let instancesDrawn = 0;
 
-    false &&
-      this.tree.executeWithinRange(boundary, (point) => {
-        const instance = point.getData();
-        if (instance) {
-          //    uniqueInstances.set(instance.id, 1);
-          instancesDrawn++;
-          try {
-            this.renderTexture.add(instance.gm, 0);
-          } catch (e) {
-            debugger;
-          }
+    this.tree.executeWithinRange(boundary, (point) => {
+      const instance = point.getData();
+      if (instance) {
+        //    uniqueInstances.set(instance.id, 1);
+        instancesDrawn++;
+        try {
+          this.renderTexture.add(instance.gm, 0);
+        } catch (e) {
+          debugger;
         }
-      });
+      }
+    });
 
     // console.log("instances", instancesDrawn);
     this.renderTexture.execute();
@@ -296,8 +226,8 @@ class Scene extends Phaser.Scene {
 }
 
 const phaserConfig = {
-  width: 600 * 1,
-  height: (600 * 1) / 1.33,
+  width: 360 * 3,
+  height: (360 * 3) / 1.33,
   type: Phaser.WEBGL,
   backgroundColor: "#2273a8",
   orientation: "landscape",
