@@ -66,7 +66,7 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
       layer.objects.forEach((gm) => {
         // Temporarily adjust the scale for rendering
         const tempScale = gm.scale;
-        gm.scale = this.upscale;
+        gm.scale = this.upscale * gm.scale;
 
         // Draw the object with upscaling
         this.batchDraw(
