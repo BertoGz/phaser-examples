@@ -14,7 +14,8 @@
   "dependencies": {
     "express": "^4.19.2",
     "fabric": "^5.3.0",
-    "phaser": "^3.80.1"
+    "phaser": "^3.80.1",
+    "rbush": "^4.0.1"
   },
   "devDependencies": {
     "@babel/cli": "^7.24.1",
