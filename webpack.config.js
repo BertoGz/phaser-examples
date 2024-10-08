@@ -12,5 +12,4 @@ module.exports = {
     path: path.resolve(__dirname, "public"), // Output directory
   },
   mode: "development", // Set to 'production' for minification
-  // devtool: "source-map", // Generates source maps for debugging
 };

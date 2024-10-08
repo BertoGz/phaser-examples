@@ -12,8 +12,8 @@
   "author": "Berto Gonzalez",
   "license": "ISC",
   "dependencies": {
+    "dexie": "^4.0.8",
     "express": "^4.19.2",
-    "fabric": "^5.3.0",
     "phaser": "^3.80.1",
     "rbush": "^4.0.1"
   },
@@ -21,8 +21,13 @@
     "@babel/cli": "^7.24.1",
     "@babel/core": "^7.24.4",
     "@babel/preset-env": "^7.24.4",
+    "babel-loader": "9.2.1",
     "nodemon": "^2.0.20",
     "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4"
+  },
+  "engines": {
+    "node": "16.0.0",
+    "npm": "8.12.1"
   }
 }

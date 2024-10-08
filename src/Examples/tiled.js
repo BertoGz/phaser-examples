@@ -3,9 +3,11 @@ import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
 import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
-import ConvertTiled from "surf-make/src/ConvertTiled";
 
-import WorldAPI from "surf-make/src/WorldLoader";
+import ConvertTiled from "world-loader/src/ConvertTiled";
+
+import WorldAPI from "world-loader/src/WorldLoader";
+
 import PhaserInput from "../Classes/PhaserInput";
 
 const ROOT_PATH = "/assets/world3-files";

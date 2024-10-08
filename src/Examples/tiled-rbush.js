@@ -2,11 +2,9 @@ import Phaser from "phaser";
 import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
-//import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
-import ConvertTiled from "surf-make/src/ConvertTiled";
-import { createPixelScene } from "../Classes/PhaserPixelScene";
 
-import WorldAPI from "surf-make/src/WorldLoader";
+import ConvertTiled from "../world-loader/ConvertTiled";
+import WorldAPI from "../world-loader/WorldLoader";
 import PhaserInput from "../Classes/PhaserInput";
 import RBush from "rbush";
 
@@ -42,8 +40,8 @@ class Scene extends Phaser.Scene {
   preload() {
     this.worldLoader = worldAPI.createLoader({
       chunkSize: 16 * 100,
-      gridSize: 5,
-      trailDistance: 5,
+      gridSize: 3,
+      trailDistance: 3,
       name: "environment",
       table: "any",
     });
@@ -122,18 +120,13 @@ class Scene extends Phaser.Scene {
     this.input.on("pointerdown", (pointer) => {
       console.log("pointer down");
       const worldPoint = this.camera.getWorldPoint(pointer.x, pointer.y);
-      false &&
-        worldAPI.execute({
-          x: this.player.x,
-          y: this.player.y,
-        });
 
       this.lastClick = { x: worldPoint.x, y: worldPoint.y };
     });
 
     this.worldLoader.onCreateObject = (payload) => {
       if (Math.random() > 0.3) {
-        //  return;
+        //   return;
       }
       const { object, chunk } = payload || {};
       const { tileId, x, y } = object || {};
@@ -197,6 +190,7 @@ class Scene extends Phaser.Scene {
 
     this.renderTexture.removeAll();
     this.player.update(time, 1);
+
     worldAPI.execute({
       x: this.player.x,
       y: this.player.y,

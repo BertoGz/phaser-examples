@@ -11,7 +11,8 @@ import Phaser from "phaser";
 import PhaserCamera from "../Classes/PhaserCamera";
 import Player from "../Prefabs/Player";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
-import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
+//import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
+import RBush from "rbush";
 
 let game;
 
@@ -64,10 +65,9 @@ class Scene extends Phaser.Scene {
     this.camera.startFollow(this.player, false, 0.05);
 
     // create a quadtree manager
-    this.qm = new QuadtreeManager();
 
     // create quadtree
-    this.tree = this.qm.createTree({ name: "environment" });
+    this.tree = new RBush(4);
 
     // create a mass amount of game objects
     for (let i = 0; i < totalInstances; i++) {
@@ -82,14 +82,17 @@ class Scene extends Phaser.Scene {
       );
       img.depth = img.y;
       // utilize QuadTreeObject to wrap img
-      const gm = new QuadTreeObject(img);
-      gm.getPosition = () => {
-        return [img.x, img.y];
-      };
-      this.tree.addItem(gm);
-    }
 
-    this.tree.addQueuedPoints();
+      const treeItem = {
+        gm: img,
+        minX: img.x-100,
+        minY: img.y-100,
+        maxX: img.x + img.width+100,
+        maxY: img.y + img.height+100,
+      };
+      this.tree.insert(treeItem);
+      img.treeItem = treeItem;
+    }
 
     // create ui display
     this.ui = this.make
@@ -102,25 +105,21 @@ class Scene extends Phaser.Scene {
     this.renderTexture.removeAll();
     this.player.update(time, delta);
     this.renderTexture.add(this.player, 1);
-    this.tree.update(this.player.x, this.player.y);
 
-    const boundary = new Boundary(
-      this.camera.scrollX,
-      this.camera.scrollY,
-      this.camera.width,
-      this.camera.height,
-      50
-    );
+    const boundary = {
+      minX: this.camera.scrollX - 50,
+      minY: this.camera.scrollY - 50,
+      maxX: this.camera.scrollX + this.camera.width + 50,
+      maxY: this.camera.scrollY + this.camera.height + 50,
+    };
 
-    // set drawn intance count to 0
-    instancesDrawn = 0;
+    let instancesDrawn = 0;
 
-    this.tree.executeWithinRange(boundary, (point) => {
-      const instance = point.getData();
-
-      uniqueInstances.set(instance.id, 1);
+    const points = this.tree.search(boundary);
+    points.forEach((p) => {
+      this.renderTexture.add(p.gm, 0);
+      uniqueInstances.set(p, 1);
       instancesDrawn++;
-      this.renderTexture.add(instance.gm);
     });
 
     this.ui.setText(
@@ -147,7 +146,7 @@ const phaserConfig = {
   },
   fps: {
     target: 60,
-    forceSetTimeOut: true,
+    forceSetTimeOut: false,
   },
   pixelArt: true,
   scene: [Scene],

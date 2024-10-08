@@ -1,0 +1,71 @@
+Arguments: 
+  /Users/bertogonzalez/.nvm/versions/node/v16.0.0/bin/node /opt/homebrew/bin/yarn
+
+PATH: 
+  /Users/bertogonzalez/.nvm/versions/node/v16.0.0/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/bertogonzalez/.nvm/versions/node/v16.0.0/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:/Users/bertogonzalez/Library/Android/sdk/emulator:/Users/bertogonzalez/Library/Android/sdk/tools:/Users/bertogonzalez/Library/Android/sdk/tools/bin:/Users/bertogonzalez/Library/Android/sdk/platform-tools:/Users/bertogonzalez/.rvm/bin:/Users/bertogonzalez/Library/Android/sdk/emulator:/Users/bertogonzalez/Library/Android/sdk/tools:/Users/bertogonzalez/Library/Android/sdk/tools/bin:/Users/bertogonzalez/Library/Android/sdk/platform-tools:/Users/bertogonzalez/Library/Android/sdk/emulator:/Users/bertogonzalez/Library/Android/sdk/platform-tools:/Users/bertogonzalez/.rvm/bin
+
+Yarn version: 
+  1.22.17
+
+Node version: 
+  16.0.0
+
+Platform: 
+  darwin arm64
+
+Trace: 
+  Error: https://registry.yarnpkg.com/world-loader: Not found
+      at Request.params.callback [as _callback] (/opt/homebrew/lib/node_modules/yarn/lib/cli.js:67029:18)
+      at Request.self.callback (/opt/homebrew/lib/node_modules/yarn/lib/cli.js:140883:22)
+      at Request.emit (node:events:365:28)
+      at Request.<anonymous> (/opt/homebrew/lib/node_modules/yarn/lib/cli.js:141855:10)
+      at Request.emit (node:events:365:28)
+      at IncomingMessage.<anonymous> (/opt/homebrew/lib/node_modules/yarn/lib/cli.js:141777:12)
+      at Object.onceWrapper (node:events:471:28)
+      at IncomingMessage.emit (node:events:377:35)
+      at endReadableNT (node:internal/streams/readable:1312:12)
+      at processTicksAndRejections (node:internal/process/task_queues:83:21)
+
+npm manifest: 
+  {
+    "name": "phaser-webpack-project",
+    "version": "1.0.0",
+    "description": "",
+    "main": "server.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1",
+      "dev-start": "nodemon --inspect=3000",
+      "build": "npx webpack",
+      "start": "node server.js"
+    },
+    "author": "Berto Gonzalez",
+    "license": "ISC",
+    "dependencies": {
+      "express": "^4.19.2",
+      "phaser": "^3.80.1",
+      "rbush": "^4.0.1"
+    },
+    "devDependencies": {
+      "babel-loader": "9.2.1",
+      "@babel/cli": "^7.24.1",
+      "@babel/core": "^7.24.4",
+      "@babel/preset-env": "^7.24.4",
+      "nodemon": "^2.0.20",
+      "webpack": "^5.91.0",
+      "webpack-cli": "^5.1.4",
+      "world-loader": "1.0.0"
+    },
+    "engines": {
+      "node": ">=16.0.0 <17.0.0"
+    },
+    "private": true,
+    "workspaces": [
+      "world-loader"
+    ]
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
