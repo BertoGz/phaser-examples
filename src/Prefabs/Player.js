@@ -44,6 +44,9 @@ class MovementHandler {
     this.gameObject.x += this.movementX;
     this.gameObject.y += this.movementY;
   }
+  setMaxSpeed(spd = 1) {
+    this.maxSpeed = spd;
+  }
   update(time, delta) {
     this.steerCharacter(time, delta);
   }
