@@ -40,8 +40,8 @@ const quadtreeDemoBtn = createButton("Quadtree Demo", () => {
 newDiv.appendChild(quadtreeDemoBtn);
 
 
-const tiledDemoBtn = createButton("Tiled Demo", () => {
-  window.location.href = window.location.origin + "/tiled-demo";
+const tiledDemoBtn = createButton("World Loader Demo", () => {
+  window.location.href = window.location.origin + "/world-loader-demo";
 });
 newDiv.appendChild(tiledDemoBtn);
 

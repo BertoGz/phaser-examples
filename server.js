@@ -15,7 +15,7 @@ app.get("/quadtree-demo", (req, res) => {
 app.get("/smooth-pixel-demo", (req, res) => {
   res.sendFile(__dirname + "/public/smooth-pixel.html");
 });
-app.get("/tiled-demo", (req, res) => {
+app.get("/world-loader-demo", (req, res) => {
   res.sendFile(__dirname + "/public/tiled.html");
 });
 
