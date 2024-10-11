@@ -3,8 +3,8 @@ import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
 
-import ConvertTiled from "world-loader/src/ConvertTiled";
-import WorldAPI from "world-loader/src/WorldLoader";
+import ConvertTiled from "../world-loader/ConvertTiled";
+import WorldAPI from "../world-loader/WorldLoader";
 
 import RBush from "rbush";
 
