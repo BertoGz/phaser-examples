@@ -157,6 +157,10 @@ class Loader {
   cleanUp() {
     this.worker.terminate();
   }
+  setStale(chunkKey) {
+    this.worker.postMessage({ type: "loader-set-stale", payload: chunkKey });
+  }
+
   // called by the api when an object needs to be created
   onCreateObject = () => {};
 

@@ -16,8 +16,34 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
+
+    /* Ensure there's no margin or padding on the body */
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* Prevent scrollbars */
+      background-color: white;
+    }
   </style>
-  <body style="margin: 0; padding: 0; background-color: black">
+  <body>
     <script src="tiled.bundle.js"></script>
+
+    <div style="display: flex">
+      <fieldset>
+        <legend>controls</legend>
+        <p>WASD: move</p>
+      </fieldset>
+      <fieldset style="display: flex;">
+        <legend>debug parameters:</legend>
+        <div>
+          <input type="checkbox" id="zoom-out" name="zoom-out" />
+          <label for="zoom-out">Zoom Out</label>
+        </div>
+        <div>
+          <input type="checkbox" id="clear storage" name="clear storage" />
+          <label for="clear storage">Clear Storage</label>
+        </div>
+      </fieldset>
+    </div>
   </body>
 </html>

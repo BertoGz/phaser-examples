@@ -364,10 +364,8 @@ export default class ConvertTiled {
   }
 
   async deleteMap(filename) {
-    debugger;
     const mapTable = this.dexie.db.table(filename);
     if (mapTable) {
-      debugger;
       await mapTable.clear();
       const converted_maps = this.dexie.db.table("converted_maps");
       await converted_maps.delete(filename);

@@ -4,14 +4,8 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
     if (!width || !height) {
       console.error("width or height not specified");
     }
-    super(
-      scene,
-      x,
-      y,
-      width ?? scene.game.config.width,
-      height ?? scene.game.config.height
-    );
-
+    super(scene, x, y, width ?? camera.width, height ?? camera.height);
+    this.scene = scene;
     this.upscale = scene.game.config.upscale ?? scaling ?? 1;
 
     this.setOrigin(0, 0);
@@ -88,5 +82,17 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
 
     this.x = diffX;
     this.y = diffY;
+  }
+  updateDimensions() {
+    this.destroy();
+
+    // this.setDisplaySize(this.scene.camera.width,this.scene.camera.height);
+  }
+  destroy() {
+    //  this.clear()
+    //this.removeFromDisplayList()
+    // this.removeFromUpdateList()
+    // this.removeAll();
+    super.destroy();
   }
 }

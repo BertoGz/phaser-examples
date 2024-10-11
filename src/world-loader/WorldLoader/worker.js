@@ -58,6 +58,7 @@ class ClientPosition {
     this.y = 0;
     this.prevX = undefined;
     this.prevY = undefined;
+    this.stale = false;
   }
 
   /**
@@ -71,11 +72,15 @@ class ClientPosition {
     this.x = Math.floor(x / this.chunkSize) * this.chunkSize;
     this.y = Math.floor(y / this.chunkSize) * this.chunkSize;
 
-    if (this.prevX !== this.x || this.prevY !== this.y) {
+    if (this.prevX !== this.x || this.prevY !== this.y || this.stale) {
       this.eventEmitter.notify("clientChunkChange", this);
       this.prevX = this.x;
       this.prevY = this.y;
+      this.stale = false;
     }
+  }
+  setStale() {
+    this.stale = true;
   }
 
   cleanUp() {
@@ -298,6 +303,20 @@ class ChunkCreator {
       }
     }
     return newChunks;
+  }
+  setStale(chunkKey) {
+    if (chunkKey) {
+      const chunk = this.createdChunks.get(chunkKey);
+      chunk.abort();
+      chunk.deReference();
+      handleObjectDestroy(chunk);
+    } else {
+      this.createdChunks.forEach((c) => {
+        c.abort();
+        c.deReference();
+        handleObjectDestroy(c);
+      });
+    }
   }
 }
 
@@ -543,7 +562,10 @@ class Loader {
   cleanUp() {
     this.clientPosition.cleanUp();
   }
-
+  setStale(chunkKey) {
+    this.chunkCreator.setStale(chunkKey);
+    this.clientPosition.setStale();
+  }
   // called by the api when an object needs to be created
   onCreateObject = undefined;
 
@@ -593,6 +615,9 @@ self.onmessage = async (event) => {
       break;
     case "loader-execute":
       loader.execute(payload);
+      break;
+    case "loader-set-stale":
+      loader.setStale(payload);
       break;
   }
 };
