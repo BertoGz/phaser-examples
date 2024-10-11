@@ -46,10 +46,27 @@ class InitializeData extends Phaser.Scene {
       align: "center",
       fixedWidth: 360,
     });
-    this.add.text(0, 40 + 40, "please wait...", {
+    const waitLabel = this.add.text(0, 40 + 40, "please wait...", {
       fontSize: 10,
       align: "center",
       fixedWidth: 360,
+    });
+
+    // Array to store the different loading states (i.e., "loading.", "loading..", "loading...")
+    const loadingStates = ["Loading", "Loading.", "Loading..", "Loading..."];
+    let dotIndex = 0;
+
+    // Create a timed event to update the text every 500 milliseconds
+    this.time.addEvent({
+      delay: 500, // Update every 500ms (half a second)
+      callback: () => {
+        // Update the text content with the current loading state
+        waitLabel.setText(loadingStates[dotIndex]);
+
+        // Move to the next state (loop back if needed)
+        dotIndex = (dotIndex + 1) % loadingStates.length;
+      },
+      loop: true, // Loop this event indefinitely
     });
   }
 }
