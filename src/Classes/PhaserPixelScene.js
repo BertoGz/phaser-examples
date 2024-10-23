@@ -13,6 +13,9 @@ export function createPixelScene(config, scene) {
   game.config.upscale = upscale;
   game.scene.add("Scene", scene);
 
-  game.scene.start("Scene");
+  game.startScene = () => {
+    game.scene.start("Scene");
+  };
+
   return game;
 }
