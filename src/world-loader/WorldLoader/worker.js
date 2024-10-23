@@ -1,9 +1,17 @@
 import EventEmitter from "../EventEmitter";
 import DexieSingleton from "../DexieSingleton";
 
-const QUERY_OBJECT_BATCH_SIZE = 10000;
+const QUERY_OBJECT_BATCH_SIZE = Infinity; // Read note 1a
 const CREATE_OBJECT_BATCH_SIZE = 50;
 const CREATE_OBJECT_BATCH_DELAY = 5;
+
+/**
+ * note 1a:
+ * we are suppose to fetch the objects from an array of keys
+ * we originally had a limit to slice fetch the data in slices (batches)
+ * but for now it has been removed since the map should have priority. if
+ * a map is too big to fetch then the user should work with smaller maps/chunks.
+ */
 
 function handleObjectDestroy(chunk) {
   self.postMessage({
@@ -46,10 +54,10 @@ class Timer {
 class ClientPosition {
   constructor(
     parent,
-    param = { resolution, chunkSize, gridSize, trailDistance }
+    param = { resolution, chunkDimensions, gridSize, trailDistance }
   ) {
     this.parent = parent;
-    this.chunkSize = param.chunkSize;
+    this.chunkDimensions = param.chunkDimensions;
     this.resolution = param.resolution;
     this.gridSize = param.gridSize;
     this.trailDistance = param.trailDistance;
@@ -69,8 +77,10 @@ class ClientPosition {
   execute(clientPosition) {
     const { x, y } = clientPosition || {};
 
-    this.x = Math.floor(x / this.chunkSize) * this.chunkSize;
-    this.y = Math.floor(y / this.chunkSize) * this.chunkSize;
+    this.x =
+      Math.floor(x / this.chunkDimensions.width) * this.chunkDimensions.width;
+    this.y =
+      Math.floor(y / this.chunkDimensions.height) * this.chunkDimensions.height;
 
     if (this.prevX !== this.x || this.prevY !== this.y || this.stale) {
       this.eventEmitter.notify("clientChunkChange", this);
@@ -108,27 +118,36 @@ class Chunk {
     const { position, xOff, yOff, data } = payload || {};
 
     this.creator = creator;
-    this.chunkSize = this.creator.chunkSize;
+    this.chunkDimensions = this.creator.chunkDimensions;
     this.x = xOff;
     this.y = yOff;
-    this.key = position;
+    this.key = `${
+      Math.floor(xOff / this.chunkDimensions.width) * this.chunkDimensions.width
+    },${
+      Math.floor(yOff / this.chunkDimensions.height) *
+      this.chunkDimensions.height
+    }`;
+
     this.data = data;
-    this.width = this.chunkSize;
-    this.height = this.chunkSize;
+    this.width = this.chunkDimensions.width;
+    this.height = this.chunkDimensions.height;
     this.creator.createdChunks.set(this.key, this);
     this.eventEmitter = this.creator.eventEmitter;
     this.clientKey = `${this.key}-${Date.now()}`;
   }
 
   _isWithinMatrix() {
-    const trail = (this.creator.trailDistance - 1) * this.chunkSize;
+    const trailW =
+      (this.creator.trailDistance - 1) * this.chunkDimensions.width;
+    const trailH =
+      (this.creator.trailDistance - 1) * this.chunkDimensions.height;
     const boundary = this.creator.matrixBoundary;
 
     const isWithin =
-      this.x >= boundary.x1 - trail &&
-      this.x < boundary.x2 + trail &&
-      this.y >= boundary.y1 - trail &&
-      this.y < boundary.y2 + trail;
+      this.x >= boundary.x1 - trailW &&
+      this.x < boundary.x2 + trailW &&
+      this.y >= boundary.y1 - trailH &&
+      this.y < boundary.y2 + trailH;
 
     return isWithin;
   }
@@ -155,7 +174,7 @@ class Chunk {
 class ChunkCreator {
   constructor(parent) {
     this.parent = parent;
-    this.chunkSize = this.parent.chunkSize;
+    this.chunkDimensions = this.parent.chunkDimensions;
     this.trailDistance = this.parent.trailDistance;
     this.eventEmitter = this.parent.eventEmitter;
     this.abort = undefined;
@@ -187,12 +206,12 @@ class ChunkCreator {
 
   onClientChunkChange = async (clientPosition) => {
     const gridSize = this.parent.gridSize;
-    const chunkSize = this.parent.chunkSize;
+    const chunkDimensions = this.parent.chunkDimensions;
     this.matrixBoundary = {
-      x1: clientPosition.x - Math.floor(gridSize / 2) * chunkSize,
-      y1: clientPosition.y - Math.floor(gridSize / 2) * chunkSize,
-      x2: clientPosition.x + Math.ceil(gridSize / 2) * chunkSize,
-      y2: clientPosition.y + Math.ceil(gridSize / 2) * chunkSize,
+      x1: clientPosition.x - Math.floor(gridSize / 2) * chunkDimensions.width,
+      y1: clientPosition.y - Math.floor(gridSize / 2) * chunkDimensions.height,
+      x2: clientPosition.x + Math.ceil(gridSize / 2) * chunkDimensions.width,
+      y2: clientPosition.y + Math.ceil(gridSize / 2) * chunkDimensions.height,
     };
 
     // delete pre-existing chunks that are no longer in the matrix
@@ -208,14 +227,10 @@ class ChunkCreator {
     });
 
     const regionChunks = this.createRegionChunks();
-    const startTime = Date.now();
 
     const [getChunks, abort] = this.queryData(regionChunks);
 
-    // this.eventEmitter.notify("objectCreatorStart", []);
     getChunks.then((data) => {
-      const totalTime = Date.now() - startTime;
-      //  console.log("done getting chunks. time elapsed:", totalTime);
       const chunks = this.initChunks(data);
       this.eventEmitter.notify("objectCreatorStart", chunks);
       this.abort = undefined;
@@ -245,9 +260,18 @@ class ChunkCreator {
 
         let chunkKeysInRegion = [];
 
+        /// TODO find map chunk dimensions
         for (const chunk of regionChunks) {
           const { x, y } = chunk || {};
-          const key = `${x},${y}`;
+
+          const key = `${
+            Math.floor(x / this.chunkDimensions.width) *
+            this.chunkDimensions.width
+          },${
+            Math.floor(y / this.chunkDimensions.height) *
+            this.chunkDimensions.height
+          }`;
+
           chunkKeysInRegion.push(key);
         }
 
@@ -266,23 +290,28 @@ class ChunkCreator {
   }
 
   createRegionChunks() {
-    const chunkSize = this.parent.chunkSize;
+    const chunkDimensions = this.parent.chunkDimensions;
     const chunks = [];
 
     for (
       let x = this.matrixBoundary.x1;
       x < this.matrixBoundary.x2;
-      x += chunkSize
+      x += chunkDimensions.width
     ) {
       for (
         let y = this.matrixBoundary.y1;
         y < this.matrixBoundary.y2;
-        y += chunkSize
+        y += chunkDimensions.height
       ) {
         const key = `${x},${y}`;
 
         if (!this.createdChunks.has(key)) {
-          const chunkBounds = { x, y, width: chunkSize, height: chunkSize };
+          const chunkBounds = {
+            x,
+            y,
+            width: chunkDimensions.width,
+            height: chunkDimensions.height,
+          };
           chunks.push(chunkBounds);
         }
       }
@@ -341,7 +370,7 @@ class ObjectCreator {
    * @param {*} objects
    * @description handles creating bulk game objects
    */
-  async createGameObjects(chunk, objects) {
+  async createGameObjects(chunk, objects, chunkDimensions) {
     return new Promise((resolve, reject) => {
       const batchSize = CREATE_OBJECT_BATCH_SIZE;
       const delay = CREATE_OBJECT_BATCH_DELAY;
@@ -414,17 +443,21 @@ class ObjectCreator {
       }
 
       chunkObjs.forEach(async (payload) => {
-        // function might abort early before all objects are created
-        // therefor at the end of this await try and delete
-        await this.createGameObjects(payload.chunk, payload.data);
+        if (payload.chunk) {
+          // function might abort early before all objects are created
+          // therefor at the end of this await try and delete
+          await this.createGameObjects(payload.chunk, payload.data);
 
-        if (!payload.chunk._isWithinMatrix() || payload.chunk.isAborted) {
-          payload.chunk.abort();
-          const chunkToDelete = payload.chunk;
+          if (!payload.chunk._isWithinMatrix() || payload.chunk.isAborted) {
+            payload.chunk.abort();
+            const chunkToDelete = payload.chunk;
 
-          payload.chunk.deReference();
+            payload.chunk.deReference();
 
-          handleObjectDestroy(chunkToDelete);
+            handleObjectDestroy(chunkToDelete);
+          }
+        } else {
+          console.log(chunkObjs);
         }
       });
     });
@@ -443,7 +476,6 @@ class ObjectCreator {
       if (!chunks.length > 0) {
         return;
       }
-      let totalTime = 0;
       let allData = [];
       // Iterate over each chunk in the 2D array (chunks)
       for (const chunk of chunks) {
@@ -457,6 +489,8 @@ class ObjectCreator {
           while (Array.isArray(chunk.data[0]) && chunk.data[0].length > 0) {
             // Get the next batch from the chunk using splice (modifies the original chunk)
             const batchToUse = chunk.data[0].splice(0, batchSize);
+
+            // check if chunk is still valid
             if (!chunk._isWithinMatrix() || chunk.isAborted) {
               chunk.abort();
               chunk.deReference();
@@ -511,7 +545,9 @@ class ObjectCreator {
       allData = []; // free up memory
 
       chunkObjects.forEach((payload) => {
-        payload.chunk.data = []; // free up memory
+        if (payload.chunk) {
+          payload.chunk.data = []; // free up memory
+        }
       });
 
       return chunkObjects;
@@ -529,11 +565,11 @@ class ObjectCreator {
 
 class Loader {
   constructor(params) {
-    const { gridSize, chunkSize, trailDistance, tableName } = params || {};
+    const { gridSize, trailDistance, tableName } = params || {};
 
     const resolution = 16;
 
-    this.chunkSize = chunkSize;
+    this.chunkDimensions = worldDb.chunkDimensions;
 
     this.trailDistance = trailDistance;
 
@@ -545,7 +581,7 @@ class Loader {
 
     this.clientPosition = new ClientPosition(this, {
       resolution,
-      chunkSize,
+      chunkDimensions: this.chunkDimensions,
       trailDistance,
       gridSize,
     });
@@ -586,8 +622,8 @@ class WorldDb {
       } else {
         WorldDb.instance = this;
         this.name = fileName;
-
         this.dexie = new DexieSingleton();
+
         this.openDb();
       }
     }
@@ -595,7 +631,20 @@ class WorldDb {
   }
   async openDb() {
     await this.dexie.db.open();
-    self.postMessage({ type: "worker-ready" });
+    const converted_worlds = this.dexie.db.table("converted_worlds");
+
+    const converted_world = await converted_worlds
+      .where("world_name")
+      .equals(this.name)
+      .toArray();
+
+    // if world exists, find its params
+    if (converted_world.length >= 1) {
+      const { chunkWidth, chunkHeight } = converted_world[0] || {};
+      this.chunkDimensions = { width: chunkWidth, height: chunkHeight };
+
+      self.postMessage({ type: "worker-ready" });
+    }
   }
   cleanUp() {
     delete WorldDb.instance;

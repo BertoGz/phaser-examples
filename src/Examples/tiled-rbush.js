@@ -4,8 +4,8 @@ import RBush from "rbush";
 import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 
-import ConvertTiled from "world-loader/src/ConvertTiled";
-import WorldAPI from "world-loader/src/WorldLoader";
+import ConvertTiled from "../world-loader/ConvertTiled";
+import WorldAPI from "../world-loader/WorldLoader";
 import { lerp } from "../Functions/lerp";
 import { createPixelScene } from "../Classes/PhaserPixelScene";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";

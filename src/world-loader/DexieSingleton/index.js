@@ -12,14 +12,11 @@ export default class DexieSingleton {
     }
     return DexieSingleton.instance;
   }
-  async init() {
+  async init(schema) {
     if (this.db.verno < 1) {
       const databaseExists = await Dexie.exists(this.dbName);
       if (!databaseExists) {
-        await this.db.version(1).stores({
-          converted_maps: "map_name,version",
-          converted_worlds: "world_name,version",
-        });
+        await this.db.version(1).stores(schema);
       } else {
         if (!this.db.isOpen()) {
           await this.db.open();

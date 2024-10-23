@@ -25,6 +25,17 @@ function getPathFileLocation(path) {
   return "";
 }
 
+/**
+ *
+ * @param {*} map
+ * @returns the width and hight of the chunk
+ */
+function getChunkSize(map) {
+  return {
+    width: map.width * map.tilewidth,
+    height: map.height * map.tileheight,
+  };
+}
 /*
 store chunks in a table. a list of objects will be inserted into "data" field.
 every time we perform a query we will only query stuff found inside that chunk.
@@ -39,20 +50,19 @@ export default class ConvertTiled {
     if (!ConvertTiled.instance) {
       ConvertTiled.instance = this;
       this.dexie = new DexieSingleton();
+      this.chunkDimensions = undefined;
     }
     return ConvertTiled.instance;
   }
   /**
    * @description initializes the library
    */
-  async init(config = { chunkResolution: undefined }) {
-    if (!config.chunkResolution) {
-      throw new Error("chunkResolution not specified in init");
-      return;
-    }
-    this.chunkResolution = config.chunkResolution;
+  async init() {
     //create initial schema for database
-    await this.dexie.init();
+    await this.dexie.init({
+      converted_maps: "map_name,version",
+      converted_worlds: "world_name,version,chunkWidth,chunkHeight",
+    });
   }
   /**
    *
@@ -64,6 +74,13 @@ export default class ConvertTiled {
 
     const converted_worlds = this.dexie.db.table("converted_worlds");
 
+    // bind function
+    this._updateWorldWithChunkDimensions =
+      this._updateWorldWithChunkDimensions.bind({
+        worldName,
+        converted_worlds,
+      });
+
     const objectTableSchema = "++id,[x+y],x,y,tileId,customProp,tileset,chunk";
     const chunkTableSchema = "position,xOff,yOff,data";
 
@@ -72,12 +89,23 @@ export default class ConvertTiled {
       .equals(worldName)
       .toArray();
 
-    // update the schema with new tables to represent world
-    if (isWorldConverted.length == 0) {
+    const isFirstConvert = isWorldConverted.length === 0;
+
+    // world is not exist. update the schema with new tables to represent world
+    if (isFirstConvert) {
       await this._addTable(`${worldName}_chunks`, chunkTableSchema);
       await this._addTable(`${worldName}_objects`, objectTableSchema);
+
       // add entry to list of converted worlds to not reconvert world again.
-      await converted_worlds.add({ world_name: worldName });
+      await converted_worlds.add({
+        world_name: worldName,
+      });
+    } else {
+      // world exists so lets read its chunkWidth/Height and set it in the db
+      // we will use this to help calculate which chunks to create later
+      const world = await converted_worlds.get(worldName);
+      const { chunkWidth, chunkHeight } = world || {};
+      this.chunkDimensions = { width: chunkWidth, height: chunkHeight };
     }
 
     // read worldFile
@@ -92,8 +120,9 @@ export default class ConvertTiled {
     const jsonData = await response.json();
     const { maps } = jsonData || {};
 
-    for (const map of maps) {
-      await this._processMap(map, worldFile);
+    // find the first map and initialize the world with that chunkResolution
+    for (const [index, map] of maps.entries()) {
+      await this._processMap(map, worldFile, index);
     }
   }
   async _processMap(map, worldFile) {
@@ -135,6 +164,13 @@ export default class ConvertTiled {
         }
       }
     }
+  }
+  // binded method
+  _updateWorldWithChunkDimensions(chunkWidth, chunkHeight) {
+    return this.converted_worlds.update(this.worldName, {
+      chunkWidth,
+      chunkHeight,
+    });
   }
   /**
    *
@@ -179,7 +215,7 @@ export default class ConvertTiled {
    * @param {file} json
    */
   async _convertTiledMap(worldName, mapPath, originX = 0, originY = 0) {
-    // Get map file
+    // Read map file
     const response = await fetch(mapPath);
 
     console.log(`Received response for ${mapPath}`, response);
@@ -188,7 +224,19 @@ export default class ConvertTiled {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
     const mapData = await response.json();
+    if (!this.chunkDimensions) {
+      const { width, height, tilewidth, tileheight } = mapData || {};
 
+      await this._updateWorldWithChunkDimensions(
+        width * tilewidth,
+        height * tileheight
+      );
+
+      this.chunkDimensions = {
+        width: width * tilewidth,
+        height: height * tileheight,
+      };
+    }
     // Process each tile and insert into the database
     const processTiles = async (map) => {
       const tilesetProps = {};
@@ -228,9 +276,11 @@ export default class ConvertTiled {
 
       const getChunkWorldPosition = (position) => {
         const xOff =
-          Math.floor(position.x / this.chunkResolution) * this.chunkResolution;
+          Math.floor(position.x / this.chunkDimensions.width) *
+          this.chunkDimensions.width;
         const yOff =
-          Math.floor(position.y / this.chunkResolution) * this.chunkResolution;
+          Math.floor(position.y / this.chunkDimensions.height) *
+          this.chunkDimensions.height;
         return { xOff, yOff };
       };
 
@@ -377,7 +427,7 @@ export default class ConvertTiled {
   }
   async deleteDatabase() {
     this.dexie.db.delete();
-    debugger;
+    this.dexie.db.close();
   }
 
   destroy() {

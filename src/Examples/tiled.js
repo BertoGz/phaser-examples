@@ -4,9 +4,8 @@ import PhaserCamera from "../Classes/PhaserCamera";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
 import QuadtreeManager, { Boundary, QuadTreeObject } from "../Classes/Quadtree";
 
-import ConvertTiled from "world-loader/src/ConvertTiled";
-
-import WorldAPI from "world-loader/src/WorldLoader";
+import ConvertTiled from "../world-loader/ConvertTiled";
+import WorldAPI from "../world-loader/WorldLoader";
 
 import PhaserInput from "../Classes/PhaserInput";
 
