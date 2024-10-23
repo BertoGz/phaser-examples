@@ -12,43 +12,16 @@ export default class PhaserCamera extends Phaser.Cameras.Scene2D.Camera {
     scene.cameras.remove(scene.cameras.main);
     // make this the main camera
     scene.cameras.addExisting(this, false);
-
-    this.target = null;
-
-    this.smoothing = 1;
   }
 
-  /**
-   *
-   * @param {Phaser.GameObjects.GameObject} target
-   * @param {Number} smoothing
-   */
-  setTarget(target, smoothing) {
-    this.target = target;
-    if (smoothing) {
-      this.smoothing = smoothing;
-    }
-  }
-  setLerp(smoothing) {
-    this.smoothing = smoothing || 1;
-  }
+  getWorldPoint(x, y) {
+    // let { x: outX, y: outY } = super.getWorldPoint(x, y);
+    // return { x: outX / this.upscale, y: outY / this.upscale };
 
-  update(time, delta) {
-    super.update(time, delta); // Call the parent class update method
-
-    this.scrollXUnscaled = this.worldView.x;
-    this.scrollYUnscaled = this.worldView.y;
-
-    if (this.target) {
-      // set the smooth target values
-      const lerpedTargetX =
-        this.target.x * this.upscale - this.width / 2;
-      const lerpedTargetY =
-        this.target.y * this.upscale - this.height / 2;
-
-      // apply target values to camera scroll position
-      this.scrollX = lerp(this.scrollX, lerpedTargetX, this.smoothing);
-      this.scrollY = lerp(this.scrollY, lerpedTargetY, this.smoothing);
-    }
+    const worldPoint = {
+      x: x / this.zoom + this.scene.camera.scrollX,
+      y: y / this.zoom + this.scene.camera.scrollY,
+    };
+    return worldPoint;
   }
 }
