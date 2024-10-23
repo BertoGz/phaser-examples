@@ -1,5 +1,4 @@
-export default class ScaledRenderTexture extends Phaser.GameObjects
-  .RenderTexture {
+export default class ScaledRenderTexture extends Phaser.GameObjects.RenderTexture {
   constructor(scene, camera, x = 0, y = 0, width, height, scaling) {
     if (!width || !height) {
       console.error("width or height not specified");
@@ -42,10 +41,13 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
 
   // Execute rendering and sorting by depth
   execute(fn) {
-    const newCam = {
+    const flooredCam = {
       x: Math.floor(this.camera.scrollX),
       y: Math.floor(this.camera.scrollY),
     };
+    // Adjust the position of the texture
+    const diffX = flooredCam.x - this.camera.scrollX;
+    const diffY = flooredCam.y - this.camera.scrollY;
 
     // Clear the render texture before drawing
     this.clear();
@@ -60,28 +62,24 @@ export default class ScaledRenderTexture extends Phaser.GameObjects
       layer.objects.forEach((gm) => {
         // Temporarily adjust the scale for rendering
         const tempScale = gm.scale;
-        gm.scale = this.upscale * gm.scale;
-
+        // debugger;
+        //console.log(this.camera.zoom)
+        gm.scale = gm.scale * this.upscale * this.camera.zoom;
+        //  debugger;
         // Draw the object with upscaling
         this.batchDraw(
           gm,
-          Math.round(gm.x * this.upscale - newCam.x),
-          Math.round(gm.y * this.upscale - newCam.y)
+          (gm.x - flooredCam.x) * this.camera.zoom,
+          (gm.y - flooredCam.y) * this.camera.zoom
         );
 
         // Restore the original scale
         gm.scale = tempScale;
       });
     });
-
-    this.endDraw();
-
-    // Adjust the position of the texture
-    const diffX = Math.floor(newCam.x) - this.camera.scrollX;
-    const diffY = Math.floor(newCam.y) - this.camera.scrollY;
-
     this.x = diffX;
     this.y = diffY;
+    this.endDraw();
   }
   updateDimensions() {
     this.destroy();
