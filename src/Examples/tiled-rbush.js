@@ -22,7 +22,7 @@ const worldAPI = new WorldAPI(WORLD_FILENAME);
 
 const loaderConfig = {
   gridSize: 3,
-  trailDistance: 1,
+  trailDistance: 2,
   name: "environment",
   table: "any",
 };
