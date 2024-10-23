@@ -45,7 +45,7 @@ class Scene extends Phaser.Scene {
     this.camera = new PhaserCamera(this, 0, 0);
     this.player = new Player(this, 0, 0, {
       maxSpeed: 2,
-      lerp: 0.01,
+      lerp: 1,
     });
 
     // create render texture to draw game objects to
@@ -54,15 +54,15 @@ class Scene extends Phaser.Scene {
       this.camera,
       0,
       0,
-      game.config.width + 1,
-      game.config.height + 1
+      game.config.width ,
+      game.config.height 
     );
 
     // let phaser manage this object
     this.add.existing(this.renderTexture);
 
     // set camera follow player
-    this.camera.startFollow(this.player, false, 0.05);
+    this.camera.startFollow(this.player, false, 1);
 
     // create a quadtree manager
 
@@ -103,7 +103,7 @@ class Scene extends Phaser.Scene {
   }
   update(time, delta) {
     this.renderTexture.removeAll();
-    this.player.update(time, delta);
+    this.player.update();
     this.renderTexture.add(this.player, 1);
 
     const boundary = {
@@ -132,8 +132,8 @@ class Scene extends Phaser.Scene {
 }
 
 const phaserConfig = {
-  width: 360,
-  height: 360 / 1.78,
+  width: 352,
+  height: 352 / 1.78,
   type: Phaser.WEBGL,
   backgroundColor: "#4f8a56",
   orientation: "landscape",
@@ -146,7 +146,7 @@ const phaserConfig = {
   },
   fps: {
     target: 60,
-    forceSetTimeOut: false,
+    forceSetTimeOut: true,
   },
   pixelArt: true,
   scene: [Scene],

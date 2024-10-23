@@ -3,7 +3,8 @@ import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
 import { createPixelScene } from "../Classes/PhaserPixelScene";
-
+import { lerp } from "../Functions/lerp";
+const UPSCALE_FACTOR = 3;
 let game;
 class Scene extends Phaser.Scene {
   preload() {
@@ -29,9 +30,10 @@ class Scene extends Phaser.Scene {
       this.camera,
       0,
       0,
-      game.config.width+1,
-      game.config.height+1
+      this.camera.width,
+      this.camera.height
     );
+
     this.add.existing(this.renderTexture);
 
     //align render texture to top left
@@ -43,8 +45,8 @@ class Scene extends Phaser.Scene {
       for (let y = -25; y < 25; y++) {
         const newTile = new Phaser.GameObjects.Image(
           this,
-          x * 16,
-          y * 16,
+          x * 16 * UPSCALE_FACTOR,
+          y * 16 * UPSCALE_FACTOR,
           "nature_tile",
           12
         );
@@ -54,28 +56,36 @@ class Scene extends Phaser.Scene {
     const tree = new Phaser.GameObjects.Image(this, 100, 100, "tree");
     this.renderTexture.add(tree);
     // create player
-    this.player = new Player(this, 0, 0, { maxSpeed: 2, lerp: 0.01 });
+    this.player = new Player(this, 0, 0, { maxSpeed: 6, lerp: 0.01 });
     this.renderTexture.add(this.player);
 
     this.player.setDepth(10);
-    this.camera.setTarget(this.player, 0.01);
+  
   }
 
   update(time, delta) {
     this.player.update(time, delta);
-
+    this.camera.scrollX = lerp(
+      this.camera.scrollX,
+      this.player.x - this.camera.width / 2,
+      0.1
+    );
+    this.camera.scrollY = lerp(
+      this.camera.scrollY,
+      this.player.y - this.camera.height / 2,
+      0.1
+    );
     requestAnimationFrame(() => {
       this.renderTexture.execute();
     });
   }
-  preUpdate() {}
 }
 
 const phaserConfig = {
   type: Phaser.WEBGL,
-  width: 360,
-  height: 360 / 1.78,
-  upscale: 4,
+  width: 352,
+  height: Math.round(352 / 1.69),
+  upscale: UPSCALE_FACTOR,
   orientation: "landscape",
   scale: {
     mode: Phaser.Scale.FIT,
@@ -92,3 +102,4 @@ const phaserConfig = {
 };
 
 game = createPixelScene(phaserConfig, Scene);
+game.startScene();

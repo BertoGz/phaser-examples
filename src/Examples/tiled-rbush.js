@@ -1,15 +1,17 @@
 import Phaser from "phaser";
-import Player from "../Prefabs/Player";
-import PhaserCamera from "../Classes/PhaserCamera";
-import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
-
-import ConvertTiled from "../world-loader/ConvertTiled";
-import WorldAPI from "../world-loader/WorldLoader";
-
 import RBush from "rbush";
 
-const GAME_WIDTH = 380;
-const GAME_HEIGHT = 380 / 1;
+import Player from "../Prefabs/Player";
+import PhaserCamera from "../Classes/PhaserCamera";
+
+import ConvertTiled from "world-loader/src/ConvertTiled";
+import WorldAPI from "world-loader/src/WorldLoader";
+import { lerp } from "../Functions/lerp";
+import { createPixelScene } from "../Classes/PhaserPixelScene";
+import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
+const UPSCALE_FACTOR = 3;
+const GAME_WIDTH = 352;
+const GAME_HEIGHT = 352 / 1;
 
 const ROOT_PATH = "/assets/world3-files";
 const WORLD_FILENAME = "world3.json";
@@ -19,16 +21,27 @@ const convertTiled = new ConvertTiled();
 const worldAPI = new WorldAPI(WORLD_FILENAME);
 
 const loaderConfig = {
-  chunkSize: 16 * 100,
   gridSize: 3,
-  trailDistance: 2,
+  trailDistance: 1,
   name: "environment",
   table: "any",
 };
 
 async function prepareDb() {
-  await convertTiled.init({ chunkResolution: 16 * 100 });
+  await convertTiled.init();
   await convertTiled.convertWorld(worldFile);
+}
+function createRenderTexture() {
+  return new ScaledRenderTexture(
+    this,
+    this.camera,
+    0,
+    0,
+    this.camera.width,
+    this.camera.height
+  )
+    .setOrigin(0)
+    .setScrollFactor(0, 0);
 }
 
 class InitializeData extends Phaser.Scene {
@@ -37,6 +50,7 @@ class InitializeData extends Phaser.Scene {
   }
   preload() {
     prepareDb().then(() => {
+      console.log("scene 1 ended");
       this.scene.start("Scene");
     });
   }
@@ -74,10 +88,9 @@ let debug = false;
 class Scene extends Phaser.Scene {
   constructor() {
     super({ key: "Scene" });
-    console.log("scene started ");
+    console.log("scene started2 ");
   }
   preload() {
-    this.worldLoader = worldAPI.createLoader(loaderConfig);
     // load game assets
     this.load.spritesheet("char_sprite", "./assets/monster-ghost.png", {
       frameWidth: 32,
@@ -88,39 +101,39 @@ class Scene extends Phaser.Scene {
       frameHeight: 16,
     });
     this.load.image("background", "./assets/icons_16x16.png");
+    this.load.image("air-balloon", "./assets/air-balloon.png");
     this.load.image("tree", "./assets/tree.png");
   }
   create() {
+    this.worldLoader = worldAPI.createLoader(loaderConfig);
+    createRenderTexture = createRenderTexture.bind(this);
     this.zoomScale = 1;
     this.isZoomedOut = false;
     this.lastClick = undefined;
-
+    this.playerIsMoving = false;
     // create quadtree
     this.tree = new RBush(4);
 
     //create camera and player
-    this.camera = new PhaserCamera(this, 0, 0).setScroll(0, 0);
-    this.player = new Player(this, 1600 * 3 - 200, 200, {
-      maxSpeed: 2,
-      lerp: 0.1,
-    })
-      .setDepth(10)
-      .setScale(0.5);
+    this.camera = new PhaserCamera(this, 0, 0); //.setScroll(0, 0);
 
+    this.player = new Player(this, 500 * UPSCALE_FACTOR, 500 * UPSCALE_FACTOR, {
+      maxSpeed: 7,
+      lerp: 0.1,
+    }).setDepth(10);
+
+    //  this.camera.startFollow(this.player, 0.1);
     this.enterKey = this.input.keyboard.addKey(
       Phaser.Input.Keyboard.KeyCodes.ENTER
     );
 
     // create render texture to draw game objects to
-    this.renderTexture = new ScaledRenderTexture(
-      this,
-      this.camera,
-      0,
-      0,
-      this.camera.width,
-      this.camera.height
-    );
+    this.renderTexture = createRenderTexture();
 
+    // this.renderTexture.setScale(this.zoomScale);
+
+    this.renderTexture.setOrigin(0);
+    this.renderTexture.setScrollFactor(0);
     // let phaser manage this object
     this.add.existing(this.renderTexture);
 
@@ -129,16 +142,35 @@ class Scene extends Phaser.Scene {
         font: "20px Arial",
         fill: "#000000",
       })
+      .setFontSize(10 * this.zoomScale)
       .setScrollFactor(0)
       .setDepth(20); // Center the text and make it interactive;
     this.input.on("pointerdown", (pointer) => {
       console.log("pointer down");
       const worldPoint = this.camera.getWorldPoint(pointer.x, pointer.y);
 
+      //   return;
       this.lastClick = {
         x: worldPoint.x,
         y: worldPoint.y,
       };
+      // destroy any prev markers
+      if (this.marker) {
+        this.marker.destroy();
+      }
+      this;
+      this.marker = this.add
+        .text(
+          pointer.x * this.zoomScale + this.camera.scrollX,
+          pointer.y * this.zoomScale + this.camera.scrollY,
+          "x",
+          {
+            fontSize: 40 * this.zoomScale,
+            color: "black",
+          }
+        )
+
+        .setOrigin(0.5);
     });
     this.camera.setOrigin(0);
     const zoomSetting = document.getElementById("zoom-out");
@@ -148,28 +180,33 @@ class Scene extends Phaser.Scene {
       if (this.isZoomedOut) {
         this.zoomScale = 9;
         this.player.movementHandler.setMaxSpeed(30);
-        this.player.setScale((0.5 * this.zoomScale) / 2);
+        // use smaller scale player sprite
+        this.player.setScale((1 * this.zoomScale) / 1);
+        this.player.setTexture("air-balloon");
+        this.player.setOrigin(0.5, 0.8);
       } else {
         this.zoomScale = 1;
         this.player.movementHandler.setMaxSpeed(1);
-        this.player.setScale(0.5);
+        this.player.setTexture("char_sprite", 6 * 8 - 1);
+        this.player.setOrigin(0.5);
+        // use bigger scale player sprite
+        this.player.setScale(1);
       }
 
-      this.fpsText.setFontSize(20 * this.zoomScale);
+      this.fpsText.setFontSize(40 * this.zoomScale);
 
       this.camera.setZoom(1 / this.zoomScale);
 
       this.renderTexture.destroy();
-      this.renderTexture = new ScaledRenderTexture(
-        this,
-        this.camera,
-        0,
-        0,
-        this.camera.width * this.zoomScale,
-        this.camera.height * this.zoomScale
-      );
+      this.renderTexture = createRenderTexture();
+      this.renderTexture.setScale(this.zoomScale);
 
       this.add.existing(this.renderTexture);
+      this.camera.scrollX =
+        this.player.x - (this.camera.width / 2) * this.zoomScale;
+      this.camera.scrollY =
+        this.player.y - (this.camera.height / 2) * this.zoomScale;
+
       // this.worldLoader.setStale();
     });
     const clearStorageSetting = document.getElementById("clear storage");
@@ -192,8 +229,8 @@ class Scene extends Phaser.Scene {
 
       const tile = new Phaser.GameObjects.Image(
         this,
-        x,
-        y,
+        x * UPSCALE_FACTOR,
+        y * UPSCALE_FACTOR,
         "nature_tile",
         tileId
       );
@@ -223,6 +260,7 @@ class Scene extends Phaser.Scene {
     this.worldLoader.onDestroyComplete = () => {};
   }
   update(time, delta) {
+    //  console.log(this.camera.scrollX, this.camera.worldView.x);
     if (
       this.lastClick &&
       Phaser.Math.Distance.Between(
@@ -236,10 +274,12 @@ class Scene extends Phaser.Scene {
         this.player,
         this.lastClick.x,
         this.lastClick.y,
-        4 * this.zoomScale
+        10 * this.zoomScale
       );
+      this.playerIsMoving = true;
     } else {
       this.lastClick = undefined;
+      this.playerIsMoving = false;
     }
     if (this?.lastElapse == undefined) {
       this.lastElapse = Date.now();
@@ -253,15 +293,21 @@ class Scene extends Phaser.Scene {
     this.player.update(time, 1);
 
     worldAPI.execute({
-      x: this.player.x,
-      y: this.player.y,
+      x: this.player.x / UPSCALE_FACTOR,
+      y: this.player.y / UPSCALE_FACTOR,
     });
 
-    // track player at the center of the screen/
-    this.camera.scrollX =
-      this.player.x - (this.camera.width * this.zoomScale) / 2;
-    this.camera.scrollY =
-      this.player.y - (this.camera.height * this.zoomScale) / 2;
+    const steerPointX =
+      this.player.x - (this.camera.width / 2) * this.zoomScale;
+    const steerPointY =
+      this.player.y - (this.camera.height / 2) * this.zoomScale;
+    this.camera.scrollY = lerp(this.camera.scrollY, steerPointY, 0.1);
+    this.camera.scrollX = lerp(this.camera.scrollX, steerPointX, 0.1);
+
+    if (!this.playerIsMoving && this.marker) {
+      this.marker.destroy();
+      this.marker = undefined;
+    }
 
     let padding = -60 * this.zoomScale;
     if (this.isZoomedOut) {
@@ -299,7 +345,6 @@ class Scene extends Phaser.Scene {
       );
     }
     this.renderTexture.add(this.player, 1);
-
     this.renderTexture.execute();
 
     if (this.enterKey.isDown) {
@@ -318,6 +363,7 @@ const phaserConfig = {
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
   type: Phaser.WEBGL,
+  upscale: UPSCALE_FACTOR,
   backgroundColor: "#2273a8",
   orientation: "landscape",
   powerPreference: "high-performance",
@@ -334,9 +380,9 @@ const phaserConfig = {
     forceSetTimeOut: true,
   },
   pixelArt: true,
-  scene: [InitializeData, Scene],
+  scene: [InitializeData],
 };
-const game = new Phaser.Game(phaserConfig);
+const game = createPixelScene(phaserConfig, Scene);
 
 function moveTowards(object, targetX, targetY, speed) {
   const dx = targetX - object.x;
