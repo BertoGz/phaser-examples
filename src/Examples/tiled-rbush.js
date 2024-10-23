@@ -55,15 +55,15 @@ class InitializeData extends Phaser.Scene {
     });
   }
   create() {
-    this.add.text(0, 40, "performing file setup", {
-      fontSize: 20,
+    this.add.text(0, 40 * UPSCALE_FACTOR, "performing file setup", {
+      fontSize: 20*UPSCALE_FACTOR,
       align: "center",
-      fixedWidth: 360,
+      fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
     });
-    const waitLabel = this.add.text(0, 40 + 40, "please wait...", {
-      fontSize: 10,
+    const waitLabel = this.add.text(0, 80 * UPSCALE_FACTOR, "please wait...", {
+      fontSize: 10*UPSCALE_FACTOR,
       align: "center",
-      fixedWidth: 360,
+      fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
     });
 
     // Array to store the different loading states (i.e., "loading.", "loading..", "loading...")
@@ -142,7 +142,7 @@ class Scene extends Phaser.Scene {
         font: "20px Arial",
         fill: "#000000",
       })
-      .setFontSize(10 * this.zoomScale)
+      .setFontSize(10 * UPSCALE_FACTOR * this.zoomScale)
       .setScrollFactor(0)
       .setDepth(20); // Center the text and make it interactive;
     this.input.on("pointerdown", (pointer) => {
