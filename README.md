@@ -1,8 +1,8 @@
 # Phaser Examples
 
-Welcome to Phaser Examples! I developed this repository to document solutions for typical game development challenges, especially within Phaser 3, such as achieving pixel-perfect graphics and optimizing the rendering of numerous game objects using quadtree. Feel free to use any of my solutions in your projects.
+Welcome to Phaser Examples! I developed this repository to document solutions for typical game development challenges, especially within Phaser 3, such as achieving pixel-perfect graphicsm rTree rendering and memory managment for open world games. Feel free to use any of my solutions in your projects.
 
-Check out the [Demo](https://phaser-examples-3cbdf0d13426.herokuapp.com)
+Check out the [Live Demo](https://phaser-examples-3cbdf0d13426.herokuapp.com)
 
 ## Installation
 
