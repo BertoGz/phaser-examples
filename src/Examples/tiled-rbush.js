@@ -27,10 +27,6 @@ const loaderConfig = {
   table: "any",
 };
 
-async function prepareDb() {
-  await convertTiled.init();
-  await convertTiled.convertWorld(worldFile);
-}
 function createRenderTexture() {
   return new ScaledRenderTexture(
     this,
@@ -49,19 +45,19 @@ class InitializeData extends Phaser.Scene {
     super({ key: "initializeData" });
   }
   preload() {
-    prepareDb().then(() => {
+    this.prepareDb().then(() => {
       console.log("scene 1 ended");
       this.scene.start("Scene");
     });
   }
   create() {
     this.add.text(0, 40 * UPSCALE_FACTOR, "performing file setup", {
-      fontSize: 20*UPSCALE_FACTOR,
+      fontSize: 20 * UPSCALE_FACTOR,
       align: "center",
       fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
     });
     const waitLabel = this.add.text(0, 80 * UPSCALE_FACTOR, "please wait...", {
-      fontSize: 10*UPSCALE_FACTOR,
+      fontSize: 10 * UPSCALE_FACTOR,
       align: "center",
       fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
     });
@@ -82,6 +78,10 @@ class InitializeData extends Phaser.Scene {
       },
       loop: true, // Loop this event indefinitely
     });
+  }
+  async prepareDb() {
+    await convertTiled.init();
+    await convertTiled.convertWorld(worldFile);
   }
 }
 let debug = false;

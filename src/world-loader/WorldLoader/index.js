@@ -20,6 +20,12 @@
  */
 
 // SINGLETON
+
+const createLoaderDefaultParams = {
+  gridSize: 1,
+  trailDistance: 1,
+  tableName: "",
+};
 class Timer {
   static instance;
   constructor() {
@@ -91,7 +97,7 @@ async function destroyInBatches(
 }
 
 class Loader {
-  constructor(parent, params) {
+  constructor(parent, params = createLoaderDefaultParams) {
     this.chunks = new Map();
     this.worker = new Worker(new URL("./worker.js", import.meta.url)); // new Loader(params);
     this.parent = parent;
@@ -177,7 +183,7 @@ export default class WorldAPI {
     this.timer = new Timer();
   }
 
-  createLoader(params) {
+  createLoader(params = createLoaderDefaultParams) {
     const loader = new Loader(this, params);
     this.loaders.push(loader);
     return loader;

@@ -1,7 +1,7 @@
 import Dexie from "dexie";
 import DexieSingleton from "../DexieSingleton";
 const THRESHOLD = (100 * 100) / 1;
-
+const MIN_VALUE = 1;
 /**
  *
  * @param {string} path
@@ -25,17 +25,6 @@ function getPathFileLocation(path) {
   return "";
 }
 
-/**
- *
- * @param {*} map
- * @returns the width and hight of the chunk
- */
-function getChunkSize(map) {
-  return {
-    width: map.width * map.tilewidth,
-    height: map.height * map.tileheight,
-  };
-}
 /*
 store chunks in a table. a list of objects will be inserted into "data" field.
 every time we perform a query we will only query stuff found inside that chunk.
@@ -61,7 +50,8 @@ export default class ConvertTiled {
     //create initial schema for database
     await this.dexie.init({
       converted_maps: "map_name,version",
-      converted_worlds: "world_name,version,chunkWidth,chunkHeight",
+      converted_worlds:
+        "world_name,version,chunkWidth,chunkHeight,tileWidth,tileHeight",
     });
   }
   /**
@@ -70,42 +60,41 @@ export default class ConvertTiled {
    * @description converts a tiled world to database
    */
   async convertWorld(worldFile = "") {
-    const worldName = getPathFileName(worldFile, ".world");
+    this.worldName = getPathFileName(worldFile, ".world");
 
-    const converted_worlds = this.dexie.db.table("converted_worlds");
-
-    // bind function
-    this._updateWorldWithChunkDimensions =
-      this._updateWorldWithChunkDimensions.bind({
-        worldName,
-        converted_worlds,
-      });
+    this.converted_worlds = this.dexie.db.table("converted_worlds");
 
     const objectTableSchema = "++id,[x+y],x,y,tileId,customProp,tileset,chunk";
     const chunkTableSchema = "position,xOff,yOff,data";
 
-    const isWorldConverted = await converted_worlds
+    const isWorldConverted = await this.converted_worlds
       .where("world_name")
-      .equals(worldName)
+      .equals(this.worldName)
       .toArray();
 
     const isFirstConvert = isWorldConverted.length === 0;
 
     // world is not exist. update the schema with new tables to represent world
     if (isFirstConvert) {
-      await this._addTable(`${worldName}_chunks`, chunkTableSchema);
-      await this._addTable(`${worldName}_objects`, objectTableSchema);
+      await this._addTable(`${this.worldName}_chunks`, chunkTableSchema);
+      await this._addTable(`${this.worldName}_objects`, objectTableSchema);
 
       // add entry to list of converted worlds to not reconvert world again.
-      await converted_worlds.add({
-        world_name: worldName,
+      await this.converted_worlds.add({
+        world_name: this.worldName,
       });
     } else {
       // world exists so lets read its chunkWidth/Height and set it in the db
       // we will use this to help calculate which chunks to create later
-      const world = await converted_worlds.get(worldName);
-      const { chunkWidth, chunkHeight } = world || {};
-      this.chunkDimensions = { width: chunkWidth, height: chunkHeight };
+      const world = await this.converted_worlds.get(this.worldName);
+      const { chunkWidth, chunkHeight, tileWidth, tileHeight } = world || {};
+
+      this.chunkDimensions = {
+        width: chunkWidth,
+        height: chunkHeight,
+        tileWidth,
+        tileHeight,
+      };
     }
 
     // read worldFile
@@ -120,7 +109,7 @@ export default class ConvertTiled {
     const jsonData = await response.json();
     const { maps } = jsonData || {};
 
-    // find the first map and initialize the world with that chunkResolution
+    // process each map
     for (const [index, map] of maps.entries()) {
       await this._processMap(map, worldFile, index);
     }
@@ -129,10 +118,11 @@ export default class ConvertTiled {
     const fileDirectory = getPathFileLocation(worldFile);
     const worldName = getPathFileName(worldFile, ".world");
 
-    const { fileName, x, y, version } = map || {};
+    const { fileName, x: mapX, y: mapY, version } = map || {};
 
     const converted_maps = this.dexie.db.table("converted_maps");
     const mapTableName = `${worldName}-${fileName}`;
+
     // check if this map has previously been converted
     const converted_map = await converted_maps
       .where("map_name")
@@ -143,40 +133,53 @@ export default class ConvertTiled {
       // find the assocaited map file based of the fileName and directory
       const mapPath = `${fileDirectory}/${fileName}`;
 
-      await this._convertTiledMap(worldName, mapPath, x, y);
-      await converted_maps.add({
-        map_name: mapTableName,
-        version,
-      });
+      await this._convertTiledMap(worldName, mapPath, mapX, mapY);
     };
 
     // if no map was found convert it
     // or if one has been found check its version number and convert if necessary.
     if (converted_map.length === 0) {
+      await converted_maps.add({
+        map_name: mapTableName,
+        version,
+      });
+
       await convert(version);
     } else {
       if (converted_map.length >= 1) {
         const { version: currentVersion } = converted_map[0] || {};
 
         if (currentVersion < version) {
-          await converted_maps.delete(mapTableName);
+          converted_maps.update(mapTableName, { version });
+
           await convert(version);
         }
       }
     }
   }
   // binded method
-  _updateWorldWithChunkDimensions(chunkWidth, chunkHeight) {
+  async _updateWorldWithChunkDimensions(mapData) {
+    const { width, height, tileheight, tilewidth } = mapData || {};
+
+    this.chunkDimensions = {
+      width,
+      height,
+      tileWidth: tilewidth,
+      tileHeight: tileheight,
+    };
+
     return this.converted_worlds.update(this.worldName, {
-      chunkWidth,
-      chunkHeight,
+      chunkWidth: width,
+      chunkHeight: height,
+      tileWidth: tilewidth,
+      tileHeight: tileheight,
     });
   }
   /**
    *
    * @param {*} mapName
    * @param {*} schema
-   * @description creates a new schema in the database for the given map
+   * @description creates a new table in the database for the given map
    */
   async _addTable(tableName, schema) {
     const currentVersion = this.dexie.db.verno;
@@ -214,7 +217,7 @@ export default class ConvertTiled {
    * @description reads a tiled json and converts it to spatial database
    * @param {file} json
    */
-  async _convertTiledMap(worldName, mapPath, originX = 0, originY = 0) {
+  async _convertTiledMap(worldName, mapPath, mapX = 0, mapY = 0) {
     // Read map file
     const response = await fetch(mapPath);
 
@@ -223,20 +226,14 @@ export default class ConvertTiled {
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
+
     const mapData = await response.json();
+
+    // if we currently dont have chunk dimensions obtain them from the first   mapData
     if (!this.chunkDimensions) {
-      const { width, height, tilewidth, tileheight } = mapData || {};
-
-      await this._updateWorldWithChunkDimensions(
-        width * tilewidth,
-        height * tileheight
-      );
-
-      this.chunkDimensions = {
-        width: width * tilewidth,
-        height: height * tileheight,
-      };
+      await this._updateWorldWithChunkDimensions(mapData);
     }
+
     // Process each tile and insert into the database
     const processTiles = async (map) => {
       const tilesetProps = {};
@@ -266,88 +263,113 @@ export default class ConvertTiled {
         return null; // Return null if no tileset is found
       }
 
-      function getTileWorldPosition(index, tileWidth, tileHeight, mapWidth) {
-        // Calculate the x position
-        const x = (index % mapWidth) * tileWidth;
-        // Calculate the y position
-        const y = Math.floor(index / mapWidth) * tileHeight;
-        return { x: x + originX, y: y + originY };
+      function getTileMapPosition(
+        index,
+        tileWidth,
+        tileHeight,
+        mapWidth,
+        mapHeight
+      ) {
+        const column = index % mapWidth; // x position in tiles
+        const row = Math.floor(index / mapHeight); // y position in tiles
+
+        const x = column; // x position on tilemap
+        const y = row; // y position on tilemap
+        const xOff = mapX / tileWidth;
+        const yOff = mapY / tileHeight;
+
+        return { x: x + xOff, y: y + yOff };
       }
 
-      const getChunkWorldPosition = (position) => {
-        const xOff =
-          Math.floor(position.x / this.chunkDimensions.width) *
-          this.chunkDimensions.width;
-        const yOff =
-          Math.floor(position.y / this.chunkDimensions.height) *
-          this.chunkDimensions.height;
+      const getChunkPosition = (position) => {
+        const xOff = Math.floor(position.x / this.chunkDimensions.width);
+        const yOff = Math.floor(position.y / this.chunkDimensions.height);
+
         return { xOff, yOff };
       };
 
       const tilesToAdd = [];
-      const layer = map.layers[0]; // Assuming only one layer for simplicity
 
       // Keep track of the computed chunk positions to later add them to
       // chunk table
       let chunksToAdd = {};
+      map.layers.forEach((layer) => {
+        for (let i = 0; i < layer.data.length; i++) {
+          const tileId = layer.data[i];
+          const tileset = getTilesetForGid(tileId);
 
-      for (let i = 0; i < layer.data.length; i++) {
-        const tileId = layer.data[i];
-        const tileset = getTilesetForGid(tileId);
+          if (!tileset) {
+            continue;
+          }
 
-        if (!tileset) {
-          continue;
-        }
+          // Get the tile_id
+          const local_tileId = tileId - tileset.firstgid;
+          const position = getTileMapPosition(
+            i,
+            tileset.tilewidth,
+            tileset.tileheight,
+            map.width,
+            map.height
+          );
 
-        // Get the tile_id
-        const local_tileId = tileId - tileset.firstgid;
-        const position = getTileWorldPosition(
-          i,
-          tileset.tilewidth,
-          tileset.tileheight,
-          map.width
-        );
+          console.log(position);
+          const chunkPos = getChunkPosition(position);
 
-        const chunkPos = getChunkWorldPosition(position);
+          if (tileId !== 0) {
+            const key = `${chunkPos.xOff},${chunkPos.yOff}`;
 
-        if (tileId !== 0) {
-          const key = `${chunkPos.xOff},${chunkPos.yOff}`;
-          // Push data to be inserted into table_objects
-          tilesToAdd.push({
-            tileId: local_tileId,
-            tileset: tileset.name,
-            ...(tilesetProps[tileId] ? tilesetProps[tileId] : null),
-            x: position.x,
-            y: position.y,
-            chunk: key,
-          });
+            // Push data to be inserted into table_objects
+            tilesToAdd.push({
+              tileId: local_tileId,
+              tileset: tileset.name,
+              ...(tilesetProps[tileId] ? tilesetProps[tileId] : null),
+              x: position.x,
+              y: position.y,
+              chunk: key,
+            });
 
-          if (!chunksToAdd[key]) {
-            chunksToAdd[key] = {
-              xOff: chunkPos.xOff,
-              yOff: chunkPos.yOff,
-              data: [],
-            };
+            // create map entry if not exists
+            if (!chunksToAdd[key]) {
+              chunksToAdd[key] = {
+                xOff: chunkPos.xOff,
+                yOff: chunkPos.yOff,
+                data: [],
+              };
+            }
           }
         }
-      }
-
+      });
+  
       try {
         const tileTable = this.dexie.db.table(`${worldName}_objects`);
         const chunkTable = this.dexie.db.table(`${worldName}_chunks`);
 
-        // Insert tiles into table_objects and retrieve their IDs
+        // if map is being rebuilt, destroy all associated entries that are currently tileTable
+        // and destroy the chunkTable entry for the map.
+        for (const c of Object.values(chunksToAdd)) {
+          const { xOff, yOff } = c || {};
+          const key = `${xOff},${yOff}`;
+
+          const table = await chunkTable.get(key);
+
+          if (table) {
+            await tileTable.bulkDelete(table.data[0]);
+            await chunkTable.delete(key);
+          }
+        }
+
         const ids = await tileTable.bulkAdd(tilesToAdd, { allKeys: true });
 
         // Map the generated IDs to their corresponding chunks
         ids.forEach((id, index) => {
           const position = tilesToAdd[index];
-          const chunkPos = getChunkWorldPosition(position);
+          const chunkPos = getChunkPosition(position);
 
           const key = `${chunkPos.xOff},${chunkPos.yOff}`;
           chunksToAdd[key].data.push(id);
         });
 
+        // start adding data to TileTable
         for (const key in chunksToAdd) {
           const threshold = THRESHOLD;
           const { xOff, yOff, data: dataToAddToThisEntry } = chunksToAdd[key];
@@ -356,7 +378,9 @@ export default class ConvertTiled {
             .where("position")
             .equals(key)
             .toArray();
+
           const organizedData = [];
+          // if entry doesnt exist  organzize the data andp ush
           if (entry.length === 0) {
             // Add remaining items in chunks if any are left after the first addition
             while (dataToAddToThisEntry.length > 0) {
@@ -364,6 +388,7 @@ export default class ConvertTiled {
             }
 
             // Entry doesn't exist, so add it with the new data
+
             await chunkTable.add({
               position: key,
               xOff,

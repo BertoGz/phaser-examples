@@ -77,13 +77,17 @@ class ClientPosition {
   execute(clientPosition) {
     const { x, y } = clientPosition || {};
 
-    this.x =
-      Math.floor(x / this.chunkDimensions.width) * this.chunkDimensions.width;
-    this.y =
-      Math.floor(y / this.chunkDimensions.height) * this.chunkDimensions.height;
+    this.x = Math.floor(
+      x / this.chunkDimensions.tileWidth / this.chunkDimensions.width
+    );
+    this.y = Math.floor(
+      y / this.chunkDimensions.tileHeight / this.chunkDimensions.height
+    );
 
     if (this.prevX !== this.x || this.prevY !== this.y || this.stale) {
+      //   debugger;
       this.eventEmitter.notify("clientChunkChange", this);
+
       this.prevX = this.x;
       this.prevY = this.y;
       this.stale = false;
@@ -121,26 +125,20 @@ class Chunk {
     this.chunkDimensions = this.creator.chunkDimensions;
     this.x = xOff;
     this.y = yOff;
-    this.key = `${
-      Math.floor(xOff / this.chunkDimensions.width) * this.chunkDimensions.width
-    },${
-      Math.floor(yOff / this.chunkDimensions.height) *
-      this.chunkDimensions.height
-    }`;
+
+    this.key = `${xOff},${yOff}`;
 
     this.data = data;
-    this.width = this.chunkDimensions.width;
-    this.height = this.chunkDimensions.height;
+    this.width = 1;
+    this.height = 1;
     this.creator.createdChunks.set(this.key, this);
     this.eventEmitter = this.creator.eventEmitter;
     this.clientKey = `${this.key}-${Date.now()}`;
   }
 
   _isWithinMatrix() {
-    const trailW =
-      (this.creator.trailDistance - 1) * this.chunkDimensions.width;
-    const trailH =
-      (this.creator.trailDistance - 1) * this.chunkDimensions.height;
+    const trailW = this.creator.trailDistance - 1;
+    const trailH = this.creator.trailDistance - 1;
     const boundary = this.creator.matrixBoundary;
 
     const isWithin =
@@ -205,13 +203,14 @@ class ChunkCreator {
   };
 
   onClientChunkChange = async (clientPosition) => {
+
     const gridSize = this.parent.gridSize;
     const chunkDimensions = this.parent.chunkDimensions;
     this.matrixBoundary = {
-      x1: clientPosition.x - Math.floor(gridSize / 2) * chunkDimensions.width,
-      y1: clientPosition.y - Math.floor(gridSize / 2) * chunkDimensions.height,
-      x2: clientPosition.x + Math.ceil(gridSize / 2) * chunkDimensions.width,
-      y2: clientPosition.y + Math.ceil(gridSize / 2) * chunkDimensions.height,
+      x1: clientPosition.x - Math.floor(gridSize / 2),
+      y1: clientPosition.y - Math.floor(gridSize / 2),
+      x2: clientPosition.x + Math.ceil(gridSize / 2),
+      y2: clientPosition.y + Math.ceil(gridSize / 2),
     };
 
     // delete pre-existing chunks that are no longer in the matrix
@@ -232,6 +231,7 @@ class ChunkCreator {
 
     getChunks.then((data) => {
       const chunks = this.initChunks(data);
+
       this.eventEmitter.notify("objectCreatorStart", chunks);
       this.abort = undefined;
     });
@@ -264,13 +264,7 @@ class ChunkCreator {
         for (const chunk of regionChunks) {
           const { x, y } = chunk || {};
 
-          const key = `${
-            Math.floor(x / this.chunkDimensions.width) *
-            this.chunkDimensions.width
-          },${
-            Math.floor(y / this.chunkDimensions.height) *
-            this.chunkDimensions.height
-          }`;
+          const key = `${x},${y}`;
 
           chunkKeysInRegion.push(key);
         }
@@ -293,24 +287,16 @@ class ChunkCreator {
     const chunkDimensions = this.parent.chunkDimensions;
     const chunks = [];
 
-    for (
-      let x = this.matrixBoundary.x1;
-      x < this.matrixBoundary.x2;
-      x += chunkDimensions.width
-    ) {
-      for (
-        let y = this.matrixBoundary.y1;
-        y < this.matrixBoundary.y2;
-        y += chunkDimensions.height
-      ) {
+    for (let x = this.matrixBoundary.x1; x < this.matrixBoundary.x2; x++) {
+      for (let y = this.matrixBoundary.y1; y < this.matrixBoundary.y2; y++) {
         const key = `${x},${y}`;
 
         if (!this.createdChunks.has(key)) {
           const chunkBounds = {
             x,
             y,
-            width: chunkDimensions.width,
-            height: chunkDimensions.height,
+            width: 1,
+            height: 1,
           };
           chunks.push(chunkBounds);
         }
@@ -390,7 +376,7 @@ class ObjectCreator {
           const object = objects[objectIndex];
 
           // Call onDestroyObject for each object in the batch
-
+     
           self.postMessage({
             type: "onCreateObject",
             payload: {
@@ -399,9 +385,15 @@ class ObjectCreator {
                 y: chunk.y,
                 width: chunk.width,
                 height: chunk.height,
+                tileWidth: chunk.chunkDimensions.tileWidth,
+                tileHeight: chunk.chunkDimensions.tileHeight,
                 key: chunk.clientKey,
               },
-              object,
+              object: {
+                ...object,
+                x: object.x * chunk.chunkDimensions.tileWidth,
+                y: object.y * chunk.chunkDimensions.tileHeight,
+              },
             },
           });
           objectIndex++; // Move to the next object
@@ -428,13 +420,13 @@ class ObjectCreator {
   }
 
   onStart = (chunks) => {
-    const fromTable = "";
     if (!chunks) {
       console.error("chunks not specified at queryObjects");
       return [Promise.reject("data not specified"), () => {}];
     }
 
     const [fetch, abort] = this.queryObjects(chunks);
+
     // update abort refernce to latest work
     this.abort = abort;
     fetch.then((chunkObjs) => {
@@ -446,6 +438,7 @@ class ObjectCreator {
         if (payload.chunk) {
           // function might abort early before all objects are created
           // therefor at the end of this await try and delete
+
           await this.createGameObjects(payload.chunk, payload.data);
 
           if (!payload.chunk._isWithinMatrix() || payload.chunk.isAborted) {
@@ -456,8 +449,6 @@ class ObjectCreator {
 
             handleObjectDestroy(chunkToDelete);
           }
-        } else {
-          console.log(chunkObjs);
         }
       });
     });
@@ -530,14 +521,10 @@ class ObjectCreator {
       const chunkObjects = new Map();
 
       allData.forEach((obj) => {
-        const chunkX =
-          Math.floor(obj.x / sampleChunk.width) * sampleChunk.width;
-        const chunkY =
-          Math.floor(obj.y / sampleChunk.height) * sampleChunk.height;
-        const key = `${chunkX},${chunkY}`;
+        const key = obj.chunk;
 
         if (!chunkObjects.has(key)) {
-          const chunk = chunks.find((c) => c.x === chunkX && c.y === chunkY);
+          const chunk = chunks.find((c) => key === c.key);
           chunkObjects.set(key, { chunk, data: [] });
         }
         chunkObjects.get(key).data.push(obj);
@@ -640,8 +627,14 @@ class WorldDb {
 
     // if world exists, find its params
     if (converted_world.length >= 1) {
-      const { chunkWidth, chunkHeight } = converted_world[0] || {};
-      this.chunkDimensions = { width: chunkWidth, height: chunkHeight };
+      const { chunkWidth, chunkHeight, tileWidth, tileHeight } =
+        converted_world[0] || {};
+      this.chunkDimensions = {
+        width: chunkWidth,
+        height: chunkHeight,
+        tileWidth,
+        tileHeight,
+      };
 
       self.postMessage({ type: "worker-ready" });
     }
