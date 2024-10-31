@@ -53,15 +53,15 @@ class Timer {
 
 class ClientPosition {
   constructor(
-    parent,
-    param = { resolution, chunkDimensions, gridSize, trailDistance }
+    loader,
+    param = { resolution, tileParams, gridSize, trailDistance }
   ) {
-    this.parent = parent;
-    this.chunkDimensions = param.chunkDimensions;
+    this.loader = loader;
+    this.tileParams = param.tileParams;
     this.resolution = param.resolution;
     this.gridSize = param.gridSize;
     this.trailDistance = param.trailDistance;
-    this.eventEmitter = this.parent.eventEmitter;
+    this.eventEmitter = this.loader.eventEmitter;
     this.x = 0;
     this.y = 0;
     this.prevX = undefined;
@@ -78,14 +78,13 @@ class ClientPosition {
     const { x, y } = clientPosition || {};
 
     this.x = Math.floor(
-      x / this.chunkDimensions.tileWidth / this.chunkDimensions.width
+      x / this.tileParams.tileWidth / this.tileParams.mapWidth
     );
     this.y = Math.floor(
-      y / this.chunkDimensions.tileHeight / this.chunkDimensions.height
+      y / this.tileParams.tileHeight / this.tileParams.mapHeight
     );
 
     if (this.prevX !== this.x || this.prevY !== this.y || this.stale) {
-      //   debugger;
       this.eventEmitter.notify("clientChunkChange", this);
 
       this.prevX = this.x;
@@ -122,12 +121,11 @@ class Chunk {
     const { position, xOff, yOff, data } = payload || {};
 
     this.creator = creator;
-    this.chunkDimensions = this.creator.chunkDimensions;
+    this.tileParams = this.creator.tileParams;
     this.x = xOff;
     this.y = yOff;
 
     this.key = `${xOff},${yOff}`;
-
     this.data = data;
     this.width = 1;
     this.height = 1;
@@ -170,11 +168,11 @@ class Chunk {
 
 // Create Chunks
 class ChunkCreator {
-  constructor(parent) {
-    this.parent = parent;
-    this.chunkDimensions = this.parent.chunkDimensions;
-    this.trailDistance = this.parent.trailDistance;
-    this.eventEmitter = this.parent.eventEmitter;
+  constructor(loader) {
+    this.loader = loader;
+    this.tileParams = this.loader.tileParams;
+    this.trailDistance = this.loader.trailDistance;
+    this.eventEmitter = this.loader.eventEmitter;
     this.abort = undefined;
     this.eventEmitter.subscribe("clientChunkChange", this.onClientChunkChange);
     this.createdChunks = new Map();
@@ -197,15 +195,12 @@ class ChunkCreator {
       }
     }
     if (allDone) {
-      //  this.parent.onChunksAllReady();
       self.postMessage({ type: "onChunksAllReady" });
     }
   };
 
   onClientChunkChange = async (clientPosition) => {
-
-    const gridSize = this.parent.gridSize;
-    const chunkDimensions = this.parent.chunkDimensions;
+    const gridSize = this.loader.gridSize;
     this.matrixBoundary = {
       x1: clientPosition.x - Math.floor(gridSize / 2),
       y1: clientPosition.y - Math.floor(gridSize / 2),
@@ -258,21 +253,10 @@ class ChunkCreator {
       async (tx) => {
         txPar = tx;
 
-        let chunkKeysInRegion = [];
-
-        /// TODO find map chunk dimensions
-        for (const chunk of regionChunks) {
-          const { x, y } = chunk || {};
-
-          const key = `${x},${y}`;
-
-          chunkKeysInRegion.push(key);
-        }
-
         // Query chunks within the boundary
         let chunksWithinBoundary = await chunksTable
           .where("position")
-          .anyOf(chunkKeysInRegion)
+          .anyOf(regionChunks)
           .toArray();
 
         return chunksWithinBoundary;
@@ -284,7 +268,6 @@ class ChunkCreator {
   }
 
   createRegionChunks() {
-    const chunkDimensions = this.parent.chunkDimensions;
     const chunks = [];
 
     for (let x = this.matrixBoundary.x1; x < this.matrixBoundary.x2; x++) {
@@ -292,13 +275,7 @@ class ChunkCreator {
         const key = `${x},${y}`;
 
         if (!this.createdChunks.has(key)) {
-          const chunkBounds = {
-            x,
-            y,
-            width: 1,
-            height: 1,
-          };
-          chunks.push(chunkBounds);
+          chunks.push(key);
         }
       }
     }
@@ -337,11 +314,11 @@ class ChunkCreator {
 
 // Create Game Objects
 class ObjectCreator {
-  constructor(parent) {
-    this.parent = parent;
-    this.eventEmitter = this.parent.eventEmitter;
-    this.chunkCreator = this.parent.chunkCreator;
-    this.clientPosition = this.parent.clientPosition;
+  constructor(loader) {
+    this.loader = loader;
+    this.eventEmitter = this.loader.eventEmitter;
+    this.tileParams = this.loader.tileParams;
+    this.clientPosition = this.loader.clientPosition;
     this.timer = new Timer();
     this.objectsCreatedCount = 0;
     this.gameObjects = [];
@@ -356,7 +333,7 @@ class ObjectCreator {
    * @param {*} objects
    * @description handles creating bulk game objects
    */
-  async createGameObjects(chunk, objects, chunkDimensions) {
+  async createGameObjects(chunk, objects) {
     return new Promise((resolve, reject) => {
       const batchSize = CREATE_OBJECT_BATCH_SIZE;
       const delay = CREATE_OBJECT_BATCH_DELAY;
@@ -376,7 +353,7 @@ class ObjectCreator {
           const object = objects[objectIndex];
 
           // Call onDestroyObject for each object in the batch
-     
+          /// TODO provide chunk size in pixels
           self.postMessage({
             type: "onCreateObject",
             payload: {
@@ -385,14 +362,14 @@ class ObjectCreator {
                 y: chunk.y,
                 width: chunk.width,
                 height: chunk.height,
-                tileWidth: chunk.chunkDimensions.tileWidth,
-                tileHeight: chunk.chunkDimensions.tileHeight,
+                tileWidth: chunk.tileParams.tileWidth,
+                tileHeight: chunk.tileParams.tileHeight,
                 key: chunk.clientKey,
               },
               object: {
                 ...object,
-                x: object.x * chunk.chunkDimensions.tileWidth,
-                y: object.y * chunk.chunkDimensions.tileHeight,
+                x: object.x * chunk.tileParams.tileWidth,
+                y: object.y * chunk.tileParams.tileHeight,
               },
             },
           });
@@ -554,9 +531,9 @@ class Loader {
   constructor(params) {
     const { gridSize, trailDistance, tableName } = params || {};
 
-    const resolution = 16;
+    const resolution = 16; // TODO UPDATE TO READ MAP RESOLUTION
 
-    this.chunkDimensions = worldDb.chunkDimensions;
+    this.tileParams = worldDb.tileParams;
 
     this.trailDistance = trailDistance;
 
@@ -568,7 +545,7 @@ class Loader {
 
     this.clientPosition = new ClientPosition(this, {
       resolution,
-      chunkDimensions: this.chunkDimensions,
+      tileParams: this.tileParams,
       trailDistance,
       gridSize,
     });
@@ -610,30 +587,32 @@ class WorldDb {
         WorldDb.instance = this;
         this.name = fileName;
         this.dexie = new DexieSingleton();
-
         this.openDb();
       }
     }
     return WorldDb.instance;
   }
+  /**
+   * @description opens the database, prepares class by reading world data.
+   */
   async openDb() {
     await this.dexie.db.open();
     const converted_worlds = this.dexie.db.table("converted_worlds");
-
     const converted_world = await converted_worlds
       .where("world_name")
       .equals(this.name)
       .toArray();
 
-    // if world exists, find its params
+    // if world exists, assign its params
     if (converted_world.length >= 1) {
       const { chunkWidth, chunkHeight, tileWidth, tileHeight } =
         converted_world[0] || {};
-      this.chunkDimensions = {
-        width: chunkWidth,
-        height: chunkHeight,
+
+      this.tileParams = {
         tileWidth,
         tileHeight,
+        mapWidth: chunkWidth,
+        mapHeight: chunkHeight,
       };
 
       self.postMessage({ type: "worker-ready" });
@@ -644,7 +623,7 @@ class WorldDb {
   }
 }
 let worldDb = undefined;
-let loader = undefined;
+let first_loader = undefined;
 
 self.onmessage = async (event) => {
   const { type, payload } = event.data;
@@ -653,13 +632,13 @@ self.onmessage = async (event) => {
       worldDb = new WorldDb(payload);
       break;
     case "loader-init":
-      loader = new Loader(payload);
+      first_loader = new Loader(payload);
       break;
     case "loader-execute":
-      loader.execute(payload);
+      first_loader.execute(payload);
       break;
     case "loader-set-stale":
-      loader.setStale(payload);
+      first_loader.setStale(payload);
       break;
   }
 };

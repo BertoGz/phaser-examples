@@ -1,7 +1,6 @@
-import Dexie from "dexie";
 import DexieSingleton from "../DexieSingleton";
 const THRESHOLD = (100 * 100) / 1;
-const MIN_VALUE = 1;
+import EventEmitter from "../EventEmitter";
 /**
  *
  * @param {string} path
@@ -40,6 +39,7 @@ export default class ConvertTiled {
       ConvertTiled.instance = this;
       this.dexie = new DexieSingleton();
       this.chunkDimensions = undefined;
+      this.eventEmitter = new EventEmitter();
     }
     return ConvertTiled.instance;
   }
@@ -109,11 +109,25 @@ export default class ConvertTiled {
     const jsonData = await response.json();
     const { maps } = jsonData || {};
 
+    let totalConverted = 0;
     // process each map
     for (const [index, map] of maps.entries()) {
       await this._processMap(map, worldFile, index);
+      totalConverted++;
+      this.onProgress(Math.round((index / maps.length) * 100));
     }
   }
+  /**
+   * @description called by the api with progress %
+   */
+  onProgress = () => {};
+
+  /**
+   *
+   * @param {*} map
+   * @param {*} worldFile
+   * @description checks to see if the map needs to be converted
+   */
   async _processMap(map, worldFile) {
     const fileDirectory = getPathFileLocation(worldFile);
     const worldName = getPathFileName(worldFile, ".world");
@@ -123,40 +137,67 @@ export default class ConvertTiled {
     const converted_maps = this.dexie.db.table("converted_maps");
     const mapTableName = `${worldName}-${fileName}`;
 
-    // check if this map has previously been converted
+    // Check if this map has previously been converted
     const converted_map = await converted_maps
       .where("map_name")
       .equals(mapTableName)
-      .toArray();
+      .first();
 
     const convert = async (version = 0) => {
-      // find the assocaited map file based of the fileName and directory
       const mapPath = `${fileDirectory}/${fileName}`;
 
+      // Process the map conversion
       await this._convertTiledMap(worldName, mapPath, mapX, mapY);
+      console.log("completed1");
     };
 
-    // if no map was found convert it
-    // or if one has been found check its version number and convert if necessary.
-    if (converted_map.length === 0) {
-      await converted_maps.add({
+    // Add a rollback entry in case of failure
+    const startTransaction = async () => {
+      await converted_maps.put({
+        map_name: mapTableName,
+        version: -1, // Use a negative version as a "processing" flag
+        status: "processing",
+      });
+    };
+
+    // Cleanup rollback entry if successful
+    const completeTransaction = async (version) => {
+      await converted_maps.put({
         map_name: mapTableName,
         version,
+        status: "complete",
       });
+    };
 
-      await convert(version);
-    } else {
-      if (converted_map.length >= 1) {
-        const { version: currentVersion } = converted_map[0] || {};
+    // Roll back changes if conversion fails
+    const rollbackTransaction = async () => {
+      await converted_maps.delete(mapTableName);
+    };
 
-        if (currentVersion < version) {
-          converted_maps.update(mapTableName, { version });
+    try {
+      // Start transaction by marking as "processing"
 
+      // If no map was found, or if version has updated, perform conversion
+      if (!converted_map) {
+        await startTransaction();
+        await convert(version);
+        await completeTransaction(version);
+      } else {
+        const { version: currentVersion, status } = converted_map || {};
+
+        if (currentVersion < version || status !== "complete") {
+          await startTransaction();
           await convert(version);
+          await completeTransaction(version);
         }
       }
+    } catch (error) {
+      // Roll back if there is an error during conversion
+      await rollbackTransaction();
+      console.error("Conversion failed, rolling back:", error);
     }
   }
+
   // binded method
   async _updateWorldWithChunkDimensions(mapData) {
     const { width, height, tileheight, tilewidth } = mapData || {};
@@ -218,224 +259,153 @@ export default class ConvertTiled {
    * @param {file} json
    */
   async _convertTiledMap(worldName, mapPath, mapX = 0, mapY = 0) {
-    // Read map file
     const response = await fetch(mapPath);
-
-    console.log(`Received response for ${mapPath}`, response);
-
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
-
     const mapData = await response.json();
 
-    // if we currently dont have chunk dimensions obtain them from the first   mapData
+    // Initialize chunk dimensions if not already set
     if (!this.chunkDimensions) {
       await this._updateWorldWithChunkDimensions(mapData);
     }
 
-    // Process each tile and insert into the database
-    const processTiles = async (map) => {
-      const tilesetProps = {};
-      // Extract tileset properties into objects
-      map.tilesets.forEach((tileset) => {
-        tilesetProps[tileset.name] = { image: tileset.name, tiles: {} };
-        tileset.tiles &&
-          tileset.tiles.forEach((tile) => {
-            tilesetProps[tileset.name].tiles[tile.id] = tile.properties.reduce(
-              (acc, prop) => {
-                acc[prop.name] = prop.value;
-                return acc;
-              },
-              {}
-            );
-          });
-      });
+    const tileTable = this.dexie.db.table(`${worldName}_objects`);
+    const chunkTable = this.dexie.db.table(`${worldName}_chunks`);
+    let chunkPosition;
+    try {
+      // Start a transaction
+      await this.dexie.db.transaction("rw", tileTable, chunkTable, async () => {
+        const tilesToAdd = [];
+        const chunksToAdd = {};
 
-      function getTilesetForGid(gId) {
-        for (let i = map.tilesets.length - 1; i >= 0; i--) {
-          const tileset = map.tilesets[i];
-
-          if (gId >= tileset.firstgid) {
-            return tileset;
-          }
-        }
-        return null; // Return null if no tileset is found
-      }
-
-      function getTileMapPosition(
-        index,
-        tileWidth,
-        tileHeight,
-        mapWidth,
-        mapHeight
-      ) {
-        const column = index % mapWidth; // x position in tiles
-        const row = Math.floor(index / mapHeight); // y position in tiles
-
-        const x = column; // x position on tilemap
-        const y = row; // y position on tilemap
-        const xOff = mapX / tileWidth;
-        const yOff = mapY / tileHeight;
-
-        return { x: x + xOff, y: y + yOff };
-      }
-
-      const getChunkPosition = (position) => {
-        const xOff = Math.floor(position.x / this.chunkDimensions.width);
-        const yOff = Math.floor(position.y / this.chunkDimensions.height);
-
-        return { xOff, yOff };
-      };
-
-      const tilesToAdd = [];
-
-      // Keep track of the computed chunk positions to later add them to
-      // chunk table
-      let chunksToAdd = {};
-      map.layers.forEach((layer) => {
-        for (let i = 0; i < layer.data.length; i++) {
-          const tileId = layer.data[i];
-          const tileset = getTilesetForGid(tileId);
-
-          if (!tileset) {
-            continue;
-          }
-
-          // Get the tile_id
-          const local_tileId = tileId - tileset.firstgid;
-          const position = getTileMapPosition(
-            i,
-            tileset.tilewidth,
-            tileset.tileheight,
-            map.width,
-            map.height
-          );
-
-          console.log(position);
-          const chunkPos = getChunkPosition(position);
-
-          if (tileId !== 0) {
-            const key = `${chunkPos.xOff},${chunkPos.yOff}`;
-
-            // Push data to be inserted into table_objects
-            tilesToAdd.push({
-              tileId: local_tileId,
-              tileset: tileset.name,
-              ...(tilesetProps[tileId] ? tilesetProps[tileId] : null),
-              x: position.x,
-              y: position.y,
-              chunk: key,
+        const processTiles = async (map) => {
+          const tilesetProps = {};
+          map.tilesets.forEach((tileset) => {
+            tilesetProps[tileset.name] = { image: tileset.name, tiles: {} };
+            tileset.tiles?.forEach((tile) => {
+              tilesetProps[tileset.name].tiles[tile.id] =
+                tile.properties.reduce((acc, prop) => {
+                  acc[prop.name] = prop.value;
+                  return acc;
+                }, {});
             });
+          });
 
-            // create map entry if not exists
-            if (!chunksToAdd[key]) {
-              chunksToAdd[key] = {
-                xOff: chunkPos.xOff,
-                yOff: chunkPos.yOff,
-                data: [],
-              };
+          const getTilesetForGid = (gId) => {
+            for (let i = map.tilesets.length - 1; i >= 0; i--) {
+              const tileset = map.tilesets[i];
+              if (gId >= tileset.firstgid) return tileset;
             }
-          }
-        }
-      });
-  
-      try {
-        const tileTable = this.dexie.db.table(`${worldName}_objects`);
-        const chunkTable = this.dexie.db.table(`${worldName}_chunks`);
+            return null;
+          };
 
-        // if map is being rebuilt, destroy all associated entries that are currently tileTable
-        // and destroy the chunkTable entry for the map.
-        for (const c of Object.values(chunksToAdd)) {
-          const { xOff, yOff } = c || {};
+          const getTileMapPosition = (
+            index,
+            tileWidth,
+            tileHeight,
+            mapWidth,
+            mapHeight
+          ) => {
+            const column = index % mapWidth;
+            const row = Math.floor(index / mapHeight);
+            const xOff = mapX / tileWidth;
+            const yOff = mapY / tileHeight;
+            return { x: column + xOff, y: row + yOff };
+          };
+
+          const getChunkPosition = (position) => {
+            const xOff = Math.floor(position.x / this.chunkDimensions.width);
+            const yOff = Math.floor(position.y / this.chunkDimensions.height);
+            return { xOff, yOff };
+          };
+
+          map.layers.forEach((layer) => {
+            layer.data.forEach((tileId, i) => {
+              const tileset = getTilesetForGid(tileId);
+              if (!tileset) return;
+
+              const localTileId = tileId - tileset.firstgid;
+              const position = getTileMapPosition(
+                i,
+                tileset.tilewidth,
+                tileset.tileheight,
+                map.width,
+                map.height
+              );
+              const chunkPos = getChunkPosition(position);
+              chunkPosition = chunkPos;
+              const key = `${chunkPos.xOff},${chunkPos.yOff}`;
+
+              tilesToAdd.push({
+                tileId: localTileId,
+                tileset: tileset.name,
+                ...(tilesetProps[tileId] || {}),
+                x: position.x,
+                y: position.y,
+                chunk: key,
+              });
+
+              if (!chunksToAdd[key]) {
+                chunksToAdd[key] = {
+                  xOff: chunkPos.xOff,
+                  yOff: chunkPos.yOff,
+                  data: [],
+                };
+              }
+            });
+          });
+        };
+
+        await processTiles(mapData);
+
+        // Delete existing entries if any
+        for (const { xOff, yOff } of Object.values(chunksToAdd)) {
           const key = `${xOff},${yOff}`;
-
-          const table = await chunkTable.get(key);
-
-          if (table) {
-            await tileTable.bulkDelete(table.data[0]);
+          const existingChunk = await chunkTable.get(key);
+          if (existingChunk) {
+            await tileTable.bulkDelete(existingChunk.data[0]);
             await chunkTable.delete(key);
           }
         }
 
+        // Add tiles in bulk
         const ids = await tileTable.bulkAdd(tilesToAdd, { allKeys: true });
-
-        // Map the generated IDs to their corresponding chunks
         ids.forEach((id, index) => {
           const position = tilesToAdd[index];
-          const chunkPos = getChunkPosition(position);
-
+          const chunkPos = chunkPosition;
           const key = `${chunkPos.xOff},${chunkPos.yOff}`;
           chunksToAdd[key].data.push(id);
         });
 
-        // start adding data to TileTable
+        // Organize and add chunks
         for (const key in chunksToAdd) {
-          const threshold = THRESHOLD;
           const { xOff, yOff, data: dataToAddToThisEntry } = chunksToAdd[key];
-
-          const entry = await chunkTable
+          const existingEntry = await chunkTable
             .where("position")
             .equals(key)
             .toArray();
 
-          const organizedData = [];
-          // if entry doesnt exist  organzize the data andp ush
-          if (entry.length === 0) {
-            // Add remaining items in chunks if any are left after the first addition
-            while (dataToAddToThisEntry.length > 0) {
-              organizedData.push(dataToAddToThisEntry.splice(0, threshold));
-            }
-
-            // Entry doesn't exist, so add it with the new data
-
+          if (existingEntry.length === 0) {
             await chunkTable.add({
               position: key,
               xOff,
               yOff,
-              data: organizedData, // Wrapping the new data in an array
+              data: [dataToAddToThisEntry],
             });
           } else {
-            const prevData = entry[0].data;
-
-            // Add new data to the existing entry
-            let lastArray = prevData[prevData.length - 1];
-
-            if (Array.isArray(lastArray) && lastArray.length < threshold) {
-              // If the last array exists and is not full, add to it
-              lastArray.push(
-                ...dataToAddToThisEntry.splice(0, threshold - lastArray.length)
-              );
-            }
-
-            // Add remaining items in chunks if any are left after the first addition
-            while (dataToAddToThisEntry.length > 0) {
-              prevData.push(dataToAddToThisEntry.splice(0, threshold));
-            }
-
-            // Update the entry in the chunkTable with the modified data
-            await chunkTable.update(key, {
-              position: key,
-              xOff,
-              yOff,
-              data: prevData,
-            });
+            const prevData = existingEntry[0].data;
+            prevData.push(...dataToAddToThisEntry);
+            await chunkTable.update(key, { data: prevData });
           }
         }
-      } catch (e) {
-        console.error("Error processing tiles:", e);
-      }
-    };
-
-    // Convert each tile to table entry
-    await processTiles(mapData)
-      .then(async () => {
-        console.log("Tiles processed and added to the Dexie database.");
-        // Add this map to the table of converted maps to no longer convert this map on the next run.
-      })
-      .catch((error) => {
-        console.error("Error processing tiles:", error);
       });
+
+      console.log("Tiles processed and added to the Dexie database.");
+    } catch (error) {
+      console.error("Error processing tiles, rolling back changes:", error);
+      // Dexie automatically rolls back all changes within the transaction on error
+    }
   }
 
   async deleteMap(filename) {
