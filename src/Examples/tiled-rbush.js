@@ -4,8 +4,8 @@ import RBush from "rbush";
 import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 
-import ConvertTiled from "../world-loader/ConvertTiled";
-import WorldAPI from "../world-loader/WorldLoader";
+import ConvertTiled from "world-loader/src/ConvertTiled";
+import WorldAPI from "world-loader/src/WorldLoader";
 import { lerp } from "../Functions/lerp";
 import { createPixelScene } from "../Classes/PhaserPixelScene";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
@@ -51,7 +51,7 @@ class InitializeData extends Phaser.Scene {
     });
   }
   create() {
-    this.add.text(0, 40 * UPSCALE_FACTOR, "performing file setup", {
+    this.add.text(0, 40 * UPSCALE_FACTOR, "building game files", {
       fontSize: 20 * UPSCALE_FACTOR,
       align: "center",
       fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
@@ -61,7 +61,17 @@ class InitializeData extends Phaser.Scene {
       align: "center",
       fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
     });
-
+    this.progress = this.add.text(0, 100 * UPSCALE_FACTOR, "", {
+      fontSize: 15 * UPSCALE_FACTOR,
+      align: "center",
+      fixedWidth: GAME_WIDTH * UPSCALE_FACTOR,
+    });
+    convertTiled.onProgress = (progress) => {
+      // console.log("loading progress", progress);
+      if (progress > 0) {
+        this.progress.setText(`${progress}%`);
+      }
+    };
     // Array to store the different loading states (i.e., "loading.", "loading..", "loading...")
     const loadingStates = ["Loading", "Loading.", "Loading..", "Loading..."];
     let dotIndex = 0;
