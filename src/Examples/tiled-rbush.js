@@ -4,8 +4,8 @@ import RBush from "rbush";
 import Player from "../Prefabs/Player";
 import PhaserCamera from "../Classes/PhaserCamera";
 
-import ConvertTiled from "../world-loader/ConvertTiled";
-import WorldAPI from "../world-loader/WorldLoader";
+import ConvertTiled from "world-loader/src/ConvertTiled";
+import WorldAPI from "world-loader/src/WorldLoader";
 import { lerp } from "../Functions/lerp";
 import { createPixelScene } from "../Classes/PhaserPixelScene";
 import ScaledRenderTexture from "../Classes/ScaledRenderTexture";
@@ -22,7 +22,7 @@ const worldAPI = new WorldAPI(WORLD_FILENAME);
 
 const loaderConfig = {
   gridSize: 3,
-  trailDistance: 2,
+  trailDistance: 1,
   name: "environment",
   table: "any",
 };
@@ -168,7 +168,7 @@ class Scene extends Phaser.Scene {
       if (this.marker) {
         this.marker.destroy();
       }
-      this;
+
       this.marker = this.add
         .text(
           pointer.x * this.zoomScale + this.camera.scrollX,
@@ -188,7 +188,7 @@ class Scene extends Phaser.Scene {
       this.isZoomedOut = event.target.checked;
 
       if (this.isZoomedOut) {
-        this.zoomScale = 9;
+        this.zoomScale = 22;
         this.player.movementHandler.setMaxSpeed(30);
         // use smaller scale player sprite
         this.player.setScale((1 * this.zoomScale) / 1);
@@ -231,8 +231,8 @@ class Scene extends Phaser.Scene {
     // Event listener for pointer (mouse or touch) click
 
     this.worldLoader.onCreateObject = (payload) => {
-      if (Math.random() > 0.15 && this.isZoomedOut) {
-        //   return;
+      if (Math.random() > 0.5 && this.isZoomedOut) {
+        // return;
       }
       const { object, chunk } = payload || {};
       const { tileId, x, y } = object || {};
@@ -244,7 +244,7 @@ class Scene extends Phaser.Scene {
         "nature_tile",
         tileId
       );
-
+      tile.id = object.id;
       tile.name = "grass";
 
       chunk.objects.push(tile);
@@ -340,10 +340,7 @@ class Scene extends Phaser.Scene {
         // when zoomed out show less sprites to prevent slow down
         if (this.isZoomedOut) {
           const isGrassTile = p.gm.frame.name === 20;
-          if (!isGrassTile && Math.random() > 0.3) {
-            return;
-          }
-          if (isGrassTile && Math.random() > 0.8) {
+          if (!isGrassTile && Math.random() > 0.14) {
             return;
           }
         }
